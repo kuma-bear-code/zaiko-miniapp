@@ -928,6 +928,9 @@
     ];
 
     const state = loadState();
+    let syncTimer = null;
+    let syncInFlight = false;
+    let syncPending = false;
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1002,6 +1005,16 @@
       state.lastUpdated = new Date().toISOString();
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderMeta();
+    }
+
+    function queueRemoteSync(reason) {
+      if (!state.apiUrl || !state.loadedFromRemote) return;
+      syncPending = true;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        syncToRemote(reason || "自動同期");
+      }, 1200);
     }
 
     function log(title, detail) {
@@ -1283,6 +1296,7 @@
       }
       saveState();
       render();
+      queueRemoteSync("追加");
     }
 
     function adjustStock(name, delta, label) {
@@ -1295,6 +1309,7 @@
       log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
       saveState();
       render();
+      queueRemoteSync("在庫調整");
     }
 
     function editItem(name) {
@@ -1318,6 +1333,7 @@
       log("品目編集", `${item.name} を更新しました`);
       saveState();
       render();
+      queueRemoteSync("編集");
     }
 
     function deleteItem(name) {
@@ -1326,14 +1342,20 @@
       log("品目削除", `${name} を削除しました`);
       saveState();
       render();
+      queueRemoteSync("削除");
     }
 
-    async function syncToRemote() {
+    async function syncToRemote(reason = "手動同期") {
       if (!state.apiUrl) {
         alert("先に API URL を設定してください。");
         return;
       }
+      if (syncInFlight) {
+        syncPending = true;
+        return;
+      }
       try {
+        syncInFlight = true;
         els.syncState.textContent = "同期中...";
         const iframeId = "inventory-sync-frame";
         let iframe = document.getElementById(iframeId);
@@ -1369,12 +1391,17 @@
         setTimeout(() => {
           if (document.body.contains(form)) document.body.removeChild(form);
         }, 500);
-        log("同期完了", "GAS へ在庫データ送信を実行しました");
-        alert("同期を送信しました。GAS 側で保存されます。");
+        syncPending = false;
+        log("同期完了", `GAS へ在庫データ送信を実行しました (${reason})`);
       } catch {
         alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
       } finally {
+        syncInFlight = false;
         renderMeta();
+        if (syncPending) {
+          syncPending = false;
+          queueRemoteSync("連続更新");
+        }
       }
     }
 
