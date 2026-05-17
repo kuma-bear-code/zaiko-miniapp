@@ -785,6 +785,9 @@
     els.apiInput.value = state.apiUrl || "";
     render();
     bindEvents();
+    if (state.apiUrl) {
+      setTimeout(() => loadRemote(), 250);
+    }
 
     function loadState() {
       try {
@@ -796,7 +799,8 @@
             categories: [],
             apiUrl: localStorage.getItem(API_KEY) || "",
             lastUpdated: new Date().toISOString(),
-            selectedCategory: "all"
+            selectedCategory: "all",
+            loadedFromRemote: false
           };
         }
         const parsed = JSON.parse(raw);
@@ -806,7 +810,8 @@
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           apiUrl: parsed.apiUrl || localStorage.getItem(API_KEY) || "",
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
-          selectedCategory: parsed.selectedCategory || "all"
+          selectedCategory: parsed.selectedCategory || "all",
+          loadedFromRemote: Boolean(parsed.loadedFromRemote)
         };
       } catch {
         return {
@@ -815,7 +820,8 @@
           categories: [],
           apiUrl: localStorage.getItem(API_KEY) || "",
           lastUpdated: new Date().toISOString(),
-          selectedCategory: "all"
+          selectedCategory: "all",
+          loadedFromRemote: false
         };
       }
     }
@@ -916,7 +922,7 @@
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
-      els.connectionPill.textContent = state.apiUrl ? "API設定あり" : "ローカルモード";
+      els.connectionPill.textContent = state.loadedFromRemote ? "GAS読込済み" : (state.apiUrl ? "API設定あり" : "ローカルモード");
       els.syncState.textContent = state.apiUrl ? "同期準備OK" : "保存済み";
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
     }
@@ -1187,6 +1193,7 @@
               state.items = data.items;
               if (Array.isArray(data.history)) state.history = data.history;
               if (Array.isArray(data.categories)) state.categories = data.categories;
+              state.loadedFromRemote = true;
               log("読み込み完了", "GAS から在庫データを取得しました");
               saveState();
               render();
@@ -1232,7 +1239,7 @@
     }
 
     function bindEvents() {
-      document.getElementById("btnReload").addEventListener("click", () => {
+        document.getElementById("btnReload").addEventListener("click", () => {
         const fresh = loadState();
         state.items = fresh.items;
         state.history = fresh.history;
@@ -1240,8 +1247,12 @@
         state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
         state.selectedCategory = fresh.selectedCategory;
+        state.loadedFromRemote = fresh.loadedFromRemote;
         els.apiInput.value = state.apiUrl || "";
         render();
+        if (state.apiUrl) {
+          loadRemote();
+        }
       });
 
       document.getElementById("btnExport").addEventListener("click", exportJson);
@@ -1253,6 +1264,9 @@
         log("API設定", state.apiUrl ? "API URL を保存しました" : "API URL を空にしました");
         saveState();
         render();
+        if (state.apiUrl) {
+          loadRemote();
+        }
       });
 
       document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
