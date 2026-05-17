@@ -58,9 +58,6 @@ function doPost(e) {
     var items = Array.isArray(body.items) ? body.items : [];
     saveInventoryItems_(items);
     syncCategories_(items);
-    if (Array.isArray(body.history)) {
-      saveHistorySnapshot_(body.history);
-    }
     return respondJson_({
       status: 'ok',
       message: 'inventory saved',
@@ -210,23 +207,6 @@ function saveInventoryItems_(items) {
   }
 }
 
-function saveHistorySnapshot_(history) {
-  if (!history.length) return;
-  var sheet = getSheet_(LOG_SHEET_NAME);
-  if (!sheet) return;
-  if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['日時', 'タイトル', '詳細']);
-  }
-  var latest = history[0];
-  if (latest && latest.time) {
-    sheet.appendRow([
-      latest.time instanceof Date ? latest.time : new Date(latest.time),
-      latest.title || '同期',
-      latest.detail || ''
-    ]);
-  }
-}
-
 function normalizeInventoryItem_(input) {
   var item = input || {};
   return {
@@ -294,9 +274,11 @@ function logConsumption_(name, delta, memo) {
   var sheet = getSheet_(LOG_SHEET_NAME);
   if (!sheet) return;
   if (sheet.getLastRow() === 0) {
-    sheet.appendRow(['日時', '品目名', '増減', 'メモ']);
+    sheet.appendRow(['品目', '日付', '数量']);
   }
-  sheet.appendRow([new Date(), name, delta, memo || '']);
+  if (Number(delta || 0) < 0) {
+    sheet.appendRow([name, formatDate_(new Date()), Math.abs(Number(delta || 0))]);
+  }
 }
 
 function buildApiPayload_() {
@@ -337,13 +319,13 @@ function readHistory_() {
   if (!sheet) return [];
   var lastRow = sheet.getLastRow();
   if (lastRow < 2) return [];
-  var values = sheet.getRange(2, 1, Math.min(lastRow - 1, 12), 4).getValues();
+  var values = sheet.getRange(2, 1, Math.min(lastRow - 1, 50), 3).getValues();
   var history = [];
   for (var i = 0; i < values.length; i++) {
     history.push({
-      time: values[i][0] instanceof Date ? values[i][0].toISOString() : String(values[i][0] || ''),
-      title: String(values[i][1] || ''),
-      detail: String(values[i][3] || values[i][2] || '')
+      item: String(values[i][0] || ''),
+      date: String(values[i][1] || ''),
+      quantity: Number(values[i][2] || 0)
     });
   }
   return history.reverse();
@@ -539,4 +521,12 @@ function sendReply_(replyToken, message) {
     payload: JSON.stringify(payload),
     muteHttpExceptions: true
   });
+}
+
+function formatDate_(date) {
+  var d = new Date(date);
+  var year = d.getFullYear();
+  var month = String(d.getMonth() + 1).padStart(2, '0');
+  var day = String(d.getDate()).padStart(2, '0');
+  return year + '-' + month + '-' + day;
 }

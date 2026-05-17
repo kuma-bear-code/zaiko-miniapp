@@ -1034,15 +1034,28 @@
         els.history.innerHTML = `<div class="history-item"><div><strong>まだ履歴がありません</strong><span>追加・調整・同期のたびに残ります</span></div></div>`;
         return;
       }
-      els.history.innerHTML = state.history.map((item) => `
-        <div class="history-item">
-          <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.detail)}</span>
+      els.history.innerHTML = state.history.map((item) => {
+        if (Object.prototype.hasOwnProperty.call(item, "item") || Object.prototype.hasOwnProperty.call(item, "date") || Object.prototype.hasOwnProperty.call(item, "quantity")) {
+          return `
+            <div class="history-item">
+              <div>
+                <strong>${escapeHtml(item.item || "")}</strong>
+                <span>${escapeHtml(item.date || "")} ・ ${escapeHtml(item.quantity ?? "")}</span>
+              </div>
+              <span>ConsumptionLog</span>
+            </div>
+          `;
+        }
+        return `
+          <div class="history-item">
+            <div>
+              <strong>${escapeHtml(item.title || "")}</strong>
+              <span>${escapeHtml(item.detail || "")}</span>
+            </div>
+            <span>${item.time ? new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
           </div>
-          <span>${new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     }
 
     function addItem(data) {
