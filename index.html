@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
@@ -105,6 +105,13 @@
       flex-wrap: wrap;
       gap: 10px;
       justify-content: flex-end;
+    }
+
+    .top-actions .btn.add {
+      background: #fff;
+      color: var(--green-dark);
+      border-color: transparent;
+      box-shadow: 0 10px 20px rgba(255, 255, 255, 0.18);
     }
 
     .btn {
@@ -518,6 +525,112 @@
       margin-top: 10px;
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 22, 14, 0.46);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(680px, 100%);
+      max-height: min(92vh, 880px);
+      overflow: auto;
+      border-radius: 28px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(17, 47, 30, 0.24);
+      padding: 18px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .modal-head h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .modal-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field-help {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .mini-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .mini-chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .mini-chip.active {
+      background: var(--green-soft);
+      border-color: #c7ebd5;
+      color: #136f39;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .fab {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 40;
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, #09c459 0%, #06c755 60%, #18b862 100%);
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 18px 40px rgba(6, 199, 85, 0.26);
+    }
+
+    .fab:hover { transform: translateY(-1px); }
+
     .footer-link {
       display: inline-flex;
       align-items: center;
@@ -563,6 +676,7 @@
           </div>
         </div>
         <div class="top-actions">
+          <button class="btn add" id="btnOpenQuickAdd">＋追加</button>
           <button class="btn ghost" id="btnReload">再読み込み</button>
           <button class="btn ghost" id="btnExport">JSON出力</button>
           <button class="btn primary" id="btnSync">GASへ同期</button>
@@ -749,6 +863,55 @@
     </div>
   </div>
 
+  <button class="fab" id="fabAdd">＋ 新規追加</button>
+
+  <div class="modal-backdrop" id="quickAddBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="quickAddTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="quickAddTitle">クイック追加</h3>
+          <p>品目名を入れて、必要なら分類を選ぶだけで素早く登録できます。</p>
+        </div>
+        <button class="btn" type="button" id="btnCloseQuickAdd">閉じる</button>
+      </div>
+
+      <form id="quickAddForm">
+        <div class="field">
+          <label>分類</label>
+          <input class="input" name="category" placeholder="例: お風呂用品" required />
+          <div class="field-help">ボタンから選ぶか、直接入力してください。</div>
+        </div>
+
+        <div class="mini-chip-row" id="modalCategoryChips" style="margin-bottom: 14px;"></div>
+
+        <div class="modal-grid">
+          <div class="field">
+            <label>品目名</label>
+            <input class="input" name="name" placeholder="例: シャンプー" required />
+          </div>
+          <div class="field">
+            <label>単位</label>
+            <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
+          </div>
+          <div class="field">
+            <label>在庫数</label>
+            <input class="input" name="stock" type="number" min="0" step="1" value="1" required />
+          </div>
+          <div class="field">
+            <label>最低在庫</label>
+            <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" type="button" id="btnQuickAddFillLast">前回の分類</button>
+          <button class="btn danger" type="button" id="btnQuickAddClear">クリア</button>
+          <button class="btn primary" type="submit">追加する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const STORAGE_KEY = "inventory_console_state_v2";
     const API_KEY = "inventory_console_api_url_v2";
@@ -780,6 +943,10 @@
       connectionPill: document.getElementById("connectionPill"),
       syncState: document.getElementById("syncState"),
       lastUpdatedPill: document.getElementById("lastUpdatedPill")
+      ,
+      quickAddBackdrop: document.getElementById("quickAddBackdrop"),
+      quickAddForm: document.getElementById("quickAddForm"),
+      modalCategoryChips: document.getElementById("modalCategoryChips")
     };
 
     els.apiInput.value = state.apiUrl || "";
@@ -788,6 +955,8 @@
     if (state.apiUrl) {
       setTimeout(() => loadRemote(), 250);
     }
+
+    renderModalCategoryChips();
 
     function loadState() {
       try {
@@ -800,7 +969,8 @@
             apiUrl: localStorage.getItem(API_KEY) || "",
             lastUpdated: new Date().toISOString(),
             selectedCategory: "all",
-            loadedFromRemote: false
+            loadedFromRemote: false,
+            lastAddedCategory: ""
           };
         }
         const parsed = JSON.parse(raw);
@@ -811,7 +981,8 @@
           apiUrl: parsed.apiUrl || localStorage.getItem(API_KEY) || "",
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
           selectedCategory: parsed.selectedCategory || "all",
-          loadedFromRemote: Boolean(parsed.loadedFromRemote)
+          loadedFromRemote: Boolean(parsed.loadedFromRemote),
+          lastAddedCategory: parsed.lastAddedCategory || ""
         };
       } catch {
         return {
@@ -821,7 +992,8 @@
           apiUrl: localStorage.getItem(API_KEY) || "",
           lastUpdated: new Date().toISOString(),
           selectedCategory: "all",
-          loadedFromRemote: false
+          loadedFromRemote: false,
+          lastAddedCategory: ""
         };
       }
     }
@@ -874,6 +1046,33 @@
       return [...new Set([...remoteCategories, ...itemCategories])].sort((a, b) => a.localeCompare(b, "ja"));
     }
 
+    function openQuickAdd(category = "") {
+      const form = els.quickAddForm;
+      form.category.value = category || state.lastAddedCategory || (selectedCategory() === "all" ? "" : selectedCategory());
+      if (!form.category.value) {
+        const firstCategory = allCategories()[0] || "";
+        form.category.value = firstCategory;
+      }
+      if (!form.stock.value) form.stock.value = 1;
+      if (!form.minStock.value) form.minStock.value = 1;
+      if (!form.unit.value) form.unit.value = "個";
+      els.quickAddBackdrop.classList.add("open");
+      els.quickAddBackdrop.setAttribute("aria-hidden", "false");
+      setTimeout(() => form.name.focus(), 50);
+    }
+
+    function closeQuickAdd() {
+      els.quickAddBackdrop.classList.remove("open");
+      els.quickAddBackdrop.setAttribute("aria-hidden", "true");
+    }
+
+    function renderModalCategoryChips() {
+      const categories = allCategories();
+      els.modalCategoryChips.innerHTML = categories.map((category) => (
+        `<button class="mini-chip" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
+      )).join("") || '<span class="field-help">カテゴリがまだありません</span>';
+    }
+
     function setSelectedCategory(category) {
       state.selectedCategory = category;
       saveState();
@@ -908,6 +1107,7 @@
 
     function render() {
       renderMeta();
+      renderModalCategoryChips();
       renderCategoryBar();
       renderInventory();
       renderHistory();
@@ -1004,9 +1204,7 @@
           if (action === "delete") deleteItem(name);
           if (action === "focus-category") setSelectedCategory(category);
           if (action === "quick-add") {
-            const addForm = document.getElementById("addForm");
-            addForm.querySelector('[name="category"]').value = category;
-            addForm.scrollIntoView({ behavior: "smooth", block: "center" });
+            openQuickAdd(category);
           }
         });
       });
@@ -1073,13 +1271,14 @@
         existing.unit = data.unit;
         log("既存品目を更新", `${existing.name} を更新しました`);
       } else {
-        state.items.unshift({
+      state.items.unshift({
           category: data.category,
           name: data.name,
           stock: Number(data.stock),
           minStock: Number(data.minStock),
           unit: data.unit
         });
+        state.lastAddedCategory = data.category;
         log("新規追加", `${data.name} を追加しました`);
       }
       saveState();
@@ -1262,7 +1461,7 @@
     }
 
     function bindEvents() {
-        document.getElementById("btnReload").addEventListener("click", () => {
+      document.getElementById("btnReload").addEventListener("click", () => {
         const fresh = loadState();
         state.items = fresh.items;
         state.history = fresh.history;
@@ -1280,6 +1479,34 @@
 
       document.getElementById("btnExport").addEventListener("click", exportJson);
       document.getElementById("btnSync").addEventListener("click", syncToRemote);
+      document.getElementById("btnOpenQuickAdd").addEventListener("click", () => openQuickAdd());
+      document.getElementById("fabAdd").addEventListener("click", () => openQuickAdd());
+      document.getElementById("btnCloseQuickAdd").addEventListener("click", closeQuickAdd);
+      document.getElementById("btnQuickAddClear").addEventListener("click", () => {
+        els.quickAddForm.reset();
+        els.quickAddForm.stock.value = 1;
+        els.quickAddForm.minStock.value = 1;
+        els.quickAddForm.unit.value = "個";
+      });
+      document.getElementById("btnQuickAddFillLast").addEventListener("click", () => {
+        els.quickAddForm.category.value = state.lastAddedCategory || selectedCategory() || "";
+      });
+
+      els.quickAddBackdrop.addEventListener("click", (event) => {
+        if (event.target === els.quickAddBackdrop) closeQuickAdd();
+      });
+      els.modalCategoryChips.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-category]");
+        if (!button) return;
+        els.quickAddForm.elements.category.value = button.dataset.category || "";
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && els.quickAddBackdrop.classList.contains("open")) closeQuickAdd();
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+          event.preventDefault();
+          openQuickAdd();
+        }
+      });
 
       document.getElementById("btnSaveApi").addEventListener("click", () => {
         state.apiUrl = els.apiInput.value.trim();
@@ -1344,6 +1571,24 @@
         event.currentTarget.querySelector('[name="unit"]').value = "個";
       });
 
+      els.quickAddForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        addItem({
+          category: form.get("category"),
+          name: form.get("name"),
+          stock: form.get("stock") || 1,
+          minStock: form.get("minStock") || 1,
+          unit: form.get("unit") || "個"
+        });
+        closeQuickAdd();
+        event.currentTarget.reset();
+        event.currentTarget.elements.category.value = state.lastAddedCategory || "";
+        event.currentTarget.elements.stock.value = 1;
+        event.currentTarget.elements.minStock.value = 1;
+        event.currentTarget.elements.unit.value = "個";
+      });
+
       document.getElementById("adjustForm").addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
@@ -1355,3 +1600,4 @@
   </script>
 </body>
 </html>
+
