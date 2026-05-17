@@ -12,6 +12,10 @@ function doGet(e) {
     return jsonpOrJson_(payload, params.callback);
   }
 
+  if (action === 'rawdata') {
+    return respondJson_(buildApiPayload_());
+  }
+
   if (action === 'categories') {
     return jsonpOrJson_({
       status: 'ok',

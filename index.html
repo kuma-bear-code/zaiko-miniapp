@@ -1186,44 +1186,67 @@
       }
       try {
         els.syncState.textContent = "読み込み中...";
-        const callbackName = `inventoryRemote_${Date.now()}`;
+        const ping = await loadRemoteJsonp("ping");
+        if (!ping || ping.status !== "ok") {
+          throw new Error("ping failed");
+        }
+        const data = await loadRemoteJsonp("data");
+        if (Array.isArray(data.items)) {
+          state.items = data.items;
+          if (Array.isArray(data.history)) state.history = data.history;
+          if (Array.isArray(data.categories)) state.categories = data.categories;
+          state.loadedFromRemote = true;
+          log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
+          saveState();
+          render();
+        } else {
+          throw new Error("invalid payload");
+        }
+      } catch {
+        alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
+      } finally {
+        renderMeta();
+      }
+    }
+
+    function loadRemoteJsonp(action) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `inventoryRemote_${action}_${Date.now()}`;
+        let finished = false;
+        const cleanup = () => {
+          delete window[callbackName];
+          const script = document.getElementById(callbackName);
+          if (script) script.remove();
+        };
+
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          reject(new Error(`${action} timeout`));
+        }, 12000);
+
         window[callbackName] = (data) => {
-          try {
-            if (Array.isArray(data.items)) {
-              state.items = data.items;
-              if (Array.isArray(data.history)) state.history = data.history;
-              if (Array.isArray(data.categories)) state.categories = data.categories;
-              state.loadedFromRemote = true;
-              log("読み込み完了", "GAS から在庫データを取得しました");
-              saveState();
-              render();
-            } else {
-              throw new Error("invalid payload");
-            }
-          } finally {
-            delete window[callbackName];
-            const script = document.getElementById(callbackName);
-            if (script) script.remove();
-            renderMeta();
-          }
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          cleanup();
+          resolve(data);
         };
 
         const script = document.createElement("script");
         script.id = callbackName;
         const joiner = state.apiUrl.includes("?") ? "&" : "?";
-        script.src = `${state.apiUrl}${joiner}action=data&callback=${callbackName}`;
+        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}`;
         script.onerror = () => {
-          delete window[callbackName];
-          if (script) script.remove();
-          alert("読み込みに失敗しました。API の返却形式を確認してください。");
-          renderMeta();
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          cleanup();
+          reject(new Error(`${action} network error`));
         };
         document.head.appendChild(script);
-      } catch {
-        alert("読み込みに失敗しました。API の返却形式を確認してください。");
-      } finally {
-        renderMeta();
-      }
+      });
     }
 
     function exportJson() {
