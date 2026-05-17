@@ -452,13 +452,18 @@ function handleLineWebhook_(body) {
     var event = events[i];
     if (!event || !event.replyToken) continue;
     if (event.type === 'message' && event.message && event.message.type === 'text') {
-      handleLineMessage_(event.replyToken, String(event.message.text || '').trim());
+      handleLineMessage_(event.replyToken, String(event.message.text || '').trim(), event);
     }
   }
   return respondJson_({ status: 'ok' });
 }
 
-function handleLineMessage_(replyToken, message) {
+function handleLineMessage_(replyToken, message, event) {
+  if (message === 'ID確認' || message === 'ユーザーID' || message.toLowerCase() === 'id') {
+    sendReply_(replyToken, buildLineIdMessage_(event));
+    return;
+  }
+
   if (message === '使い方') {
     sendReply_(replyToken, getInstructions_());
     return;
@@ -502,6 +507,20 @@ function handleLineMessage_(replyToken, message) {
   }
 
   sendReply_(replyToken, '「一覧」「低在庫」「在庫切れ」「入庫 品目名 数量」「出庫 品目名 数量」「削除 品目名」が使えます。');
+}
+
+function buildLineIdMessage_(event) {
+  var source = (event && event.source) ? event.source : {};
+  var lines = [
+    '【LINE ID確認】',
+    'userId: ' + (source.userId || '取得できませんでした'),
+    'type: ' + (source.type || 'unknown')
+  ];
+  if (source.groupId) lines.push('groupId: ' + source.groupId);
+  if (source.roomId) lines.push('roomId: ' + source.roomId);
+  lines.push('');
+  lines.push('Webアプリの許可には userId を使います。');
+  return lines.join('\n');
 }
 
 function getInstructions_() {
