@@ -793,6 +793,7 @@
           return {
             items: structuredClone(sampleInventory),
             history: [{ title: "初期データを読み込みました", detail: "ローカルモードで起動", time: new Date().toISOString() }],
+            categories: [],
             apiUrl: localStorage.getItem(API_KEY) || "",
             lastUpdated: new Date().toISOString(),
             selectedCategory: "all"
@@ -802,6 +803,7 @@
         return {
           items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
           history: Array.isArray(parsed.history) ? parsed.history : [],
+          categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           apiUrl: parsed.apiUrl || localStorage.getItem(API_KEY) || "",
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
           selectedCategory: parsed.selectedCategory || "all"
@@ -810,6 +812,7 @@
         return {
           items: structuredClone(sampleInventory),
           history: [],
+          categories: [],
           apiUrl: localStorage.getItem(API_KEY) || "",
           lastUpdated: new Date().toISOString(),
           selectedCategory: "all"
@@ -859,6 +862,12 @@
       return state.selectedCategory || "all";
     }
 
+    function allCategories() {
+      const remoteCategories = Array.isArray(state.categories) ? state.categories.filter(Boolean) : [];
+      const itemCategories = state.items.map((item) => item.category).filter(Boolean);
+      return [...new Set([...remoteCategories, ...itemCategories])].sort((a, b) => a.localeCompare(b, "ja"));
+    }
+
     function setSelectedCategory(category) {
       state.selectedCategory = category;
       saveState();
@@ -902,7 +911,7 @@
       const total = state.items.length;
       const low = state.items.filter((item) => getStatus(item) === "low").length;
       const zero = state.items.filter((item) => getStatus(item) === "zero").length;
-      const categories = new Set(state.items.map((item) => item.category)).size;
+      const categories = allCategories().length;
       els.kpiTotal.textContent = total;
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
@@ -913,7 +922,7 @@
     }
 
     function renderCategoryBar() {
-      const categories = [...new Set(state.items.map((item) => item.category))].sort((a, b) => a.localeCompare(b, "ja"));
+      const categories = allCategories();
       const current = selectedCategory();
       const statusCurrent = els.status.value;
       const chips = [
@@ -1164,6 +1173,7 @@
             if (Array.isArray(data.items)) {
               state.items = data.items;
               if (Array.isArray(data.history)) state.history = data.history;
+              if (Array.isArray(data.categories)) state.categories = data.categories;
               log("読み込み完了", "GAS から在庫データを取得しました");
               saveState();
               render();
@@ -1213,6 +1223,7 @@
         const fresh = loadState();
         state.items = fresh.items;
         state.history = fresh.history;
+        state.categories = fresh.categories || [];
         state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
         state.selectedCategory = fresh.selectedCategory;

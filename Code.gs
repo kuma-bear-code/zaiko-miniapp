@@ -306,7 +306,7 @@ function buildApiPayload_() {
     items: items,
     summary: buildSummary_(items),
     history: readHistory_(),
-    categories: readCategories_()
+    categories: readCategories_().concat(readInventoryCategories_(items))
   };
 }
 
@@ -368,6 +368,15 @@ function readCategories_() {
   return categories;
 }
 
+function readInventoryCategories_(items) {
+  var categories = {};
+  for (var i = 0; i < items.length; i++) {
+    var category = String(items[i].category || '').trim();
+    if (category) categories[category] = true;
+  }
+  return Object.keys(categories);
+}
+
 function syncCategories_(items) {
   var sheet = getSheet_(CATEGORIES_SHEET_NAME);
   if (!sheet) return;
@@ -375,6 +384,10 @@ function syncCategories_(items) {
   for (var i = 0; i < items.length; i++) {
     var category = String(items[i].category || '').trim();
     if (category) categories[category] = true;
+  }
+  var existing = readCategories_();
+  for (var j = 0; j < existing.length; j++) {
+    if (existing[j]) categories[existing[j]] = true;
   }
   var list = Object.keys(categories).sort(function(a, b) {
     return a.localeCompare(b, 'ja');
