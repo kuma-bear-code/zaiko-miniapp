@@ -459,7 +459,7 @@ function handleLineWebhook_(body) {
 }
 
 function handleLineMessage_(replyToken, message, event) {
-  if (message === 'ID確認' || message === 'ユーザーID' || message.toLowerCase() === 'id') {
+  if (isLineIdCommand_(message)) {
     sendReply_(replyToken, buildLineIdMessage_(event));
     return;
   }
@@ -507,6 +507,16 @@ function handleLineMessage_(replyToken, message, event) {
   }
 
   sendReply_(replyToken, '「一覧」「低在庫」「在庫切れ」「入庫 品目名 数量」「出庫 品目名 数量」「削除 品目名」が使えます。');
+}
+
+function isLineIdCommand_(message) {
+  var normalized = String(message || '').trim().replace(/\s+/g, '').toLowerCase();
+  return normalized === 'id' ||
+    normalized === 'lineid' ||
+    normalized === 'userid' ||
+    normalized === 'user_id' ||
+    normalized === '\u0069\u0064\u78ba\u8a8d' ||
+    normalized === '\u30e6\u30fc\u30b6\u30fc\u0069\u0064';
 }
 
 function buildLineIdMessage_(event) {
