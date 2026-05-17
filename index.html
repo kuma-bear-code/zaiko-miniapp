@@ -632,6 +632,37 @@
 
     .fab:hover { transform: translateY(-1px); }
 
+    .toast {
+      position: fixed;
+      left: 50%;
+      bottom: 20px;
+      transform: translate(-50%, 16px);
+      z-index: 80;
+      min-width: min(420px, calc(100vw - 28px));
+      max-width: calc(100vw - 28px);
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: rgba(255, 255, 255, 0.96);
+      box-shadow: 0 18px 44px rgba(21, 53, 35, 0.18);
+      color: var(--text);
+      padding: 13px 15px;
+      font-size: 13px;
+      font-weight: 800;
+      line-height: 1.55;
+      opacity: 0;
+      pointer-events: none;
+      transition: opacity 0.2s ease, transform 0.2s ease;
+    }
+
+    .toast.show {
+      opacity: 1;
+      transform: translate(-50%, 0);
+    }
+
+    .toast.good { border-color: #bdebd0; }
+    .toast.warn { border-color: #f8d991; }
+    .toast.bad { border-color: #fecaca; }
+
     .auth-screen {
       min-height: 100vh;
       display: none;
@@ -963,6 +994,8 @@
     </div>
   </div>
 
+  <div class="toast" id="toast" role="status" aria-live="polite"></div>
+
   <script>
     const STORAGE_KEY = "inventory_console_state_v2";
     const API_KEY = "inventory_console_api_url_v2";
@@ -989,6 +1022,8 @@
     let syncInFlight = false;
     let syncPending = false;
     let lineIdToken = "";
+    let lineProfileName = "";
+    let toastTimer = null;
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1010,7 +1045,8 @@
       modalCategoryChips: document.getElementById("modalCategoryChips"),
       authTitle: document.getElementById("authTitle"),
       authMessage: document.getElementById("authMessage"),
-      btnLineLogin: document.getElementById("btnLineLogin")
+      btnLineLogin: document.getElementById("btnLineLogin"),
+      toast: document.getElementById("toast")
     };
 
     startApp();
@@ -1061,6 +1097,12 @@
         if (!lineIdToken) {
           showAuthError("LINE認証トークンを取得できませんでした。もう一度ログインしてください。");
           return false;
+        }
+        try {
+          const profile = await liff.getProfile();
+          lineProfileName = profile.displayName || "";
+        } catch (err) {
+          lineProfileName = "";
         }
         return true;
       } catch (err) {
@@ -1269,11 +1311,31 @@
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
-      els.connectionPill.textContent = state.loadedFromRemote ? "GAS読込済み" : (state.apiUrl ? "API設定あり" : "ローカルモード");
-      els.syncState.textContent = state.apiUrl ? "同期準備OK" : "保存済み";
+      const userLabel = lineProfileName ? ` / ${lineProfileName}` : "";
+      els.connectionPill.textContent = state.loadedFromRemote ? `GAS読込済み${userLabel}` : (state.apiUrl ? `API設定あり${userLabel}` : "ローカルモード");
+      els.syncState.textContent = getSyncLabel();
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
       document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
       document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
+    }
+
+    function getSyncLabel() {
+      if (!state.apiUrl) return "保存済み";
+      if (syncInFlight) return "同期中...";
+      if (state.lastRemoteLoadedAt) {
+        return `最終同期 ${new Date(state.lastRemoteLoadedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
+      }
+      return "同期準備OK";
+    }
+
+    function showToast(message, tone = "good") {
+      if (!els.toast) return;
+      els.toast.textContent = message;
+      els.toast.className = `toast ${tone} show`;
+      if (toastTimer) clearTimeout(toastTimer);
+      toastTimer = setTimeout(() => {
+        els.toast.className = `toast ${tone}`;
+      }, 3200);
     }
 
     function renderCategoryBar() {
@@ -1535,8 +1597,9 @@
         syncPending = false;
         state.lastRemoteLoadedAt = new Date().toISOString();
         log("同期完了", `GAS へ在庫データ送信を実行しました (${reason})`);
+        showToast("GASへ同期しました", "good");
       } catch {
-        alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
+        showToast("同期に失敗しました。GAS設定を確認してください。", "bad");
       } finally {
         syncInFlight = false;
         renderMeta();
@@ -1570,6 +1633,9 @@
           state.lastRemoteLoadedAt = new Date().toISOString();
           if (!silent) {
             log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
+            showToast(`GASから${data.items.length}件を読み込みました`, "good");
+          } else if (auto) {
+            showToast("最新データに更新しました", "good");
           }
           saveState();
           render();
@@ -1579,9 +1645,10 @@
       } catch (err) {
         console.error("loadRemote failed", err);
         if (!silent) {
-          alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
+          showToast("読み込みに失敗しました。GAS設定を確認してください。", "bad");
         } else if (auto) {
           els.syncState.textContent = "自動同期失敗";
+          showToast("自動同期に失敗しました", "warn");
         }
       } finally {
         renderMeta();
