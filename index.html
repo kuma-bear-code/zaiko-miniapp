@@ -1,4 +1,4 @@
-<!doctype html>
+﻿<!doctype html>
 <html lang="ja">
 <head>
   <meta charset="utf-8" />
@@ -105,6 +105,13 @@
       flex-wrap: wrap;
       gap: 10px;
       justify-content: flex-end;
+    }
+
+    .top-actions .btn.add {
+      background: #fff;
+      color: var(--green-dark);
+      border-color: transparent;
+      box-shadow: 0 10px 20px rgba(255, 255, 255, 0.18);
     }
 
     .btn {
@@ -518,6 +525,112 @@
       margin-top: 10px;
     }
 
+    .modal-backdrop {
+      position: fixed;
+      inset: 0;
+      background: rgba(9, 22, 14, 0.46);
+      backdrop-filter: blur(8px);
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 18px;
+      z-index: 50;
+    }
+
+    .modal-backdrop.open { display: flex; }
+
+    .modal {
+      width: min(680px, 100%);
+      max-height: min(92vh, 880px);
+      overflow: auto;
+      border-radius: 28px;
+      background: #fff;
+      border: 1px solid var(--line);
+      box-shadow: 0 24px 80px rgba(17, 47, 30, 0.24);
+      padding: 18px;
+    }
+
+    .modal-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .modal-head h3 {
+      margin: 0;
+      font-size: 18px;
+    }
+
+    .modal-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .modal-grid {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .field-help {
+      font-size: 12px;
+      color: var(--muted);
+      margin-top: 2px;
+    }
+
+    .mini-chip-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .mini-chip {
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      border-radius: 999px;
+      padding: 8px 12px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .mini-chip.active {
+      background: var(--green-soft);
+      border-color: #c7ebd5;
+      color: #136f39;
+    }
+
+    .modal-actions {
+      display: flex;
+      gap: 10px;
+      justify-content: flex-end;
+      margin-top: 16px;
+      flex-wrap: wrap;
+    }
+
+    .fab {
+      position: fixed;
+      right: 20px;
+      bottom: 20px;
+      z-index: 40;
+      padding: 14px 18px;
+      border-radius: 999px;
+      border: none;
+      background: linear-gradient(135deg, #09c459 0%, #06c755 60%, #18b862 100%);
+      color: #fff;
+      font-weight: 900;
+      font-size: 14px;
+      cursor: pointer;
+      box-shadow: 0 18px 40px rgba(6, 199, 85, 0.26);
+    }
+
+    .fab:hover { transform: translateY(-1px); }
+
     .footer-link {
       display: inline-flex;
       align-items: center;
@@ -563,6 +676,7 @@
           </div>
         </div>
         <div class="top-actions">
+          <button class="btn add" id="btnOpenQuickAdd">＋追加</button>
           <button class="btn ghost" id="btnReload">再読み込み</button>
           <button class="btn ghost" id="btnExport">JSON出力</button>
           <button class="btn primary" id="btnSync">GASへ同期</button>
@@ -609,37 +723,203 @@
             <div class="sub">分類の種類</div>
           </div>
         </div>
+
+        <div class="section-head">
+          <div>
+            <h2>カテゴリボタン</h2>
+            <p>押すとそのカテゴリだけに絞り込めます。全体・低在庫・在庫切れもワンタップです。</p>
+          </div>
+        </div>
+        <div class="category-bar" id="categoryBar"></div>
+
+        <div class="section-head" style="margin-top:6px;">
+          <div>
+            <h2>在庫一覧</h2>
+            <p>検索と条件で絞り込んだあと、各品目のボタンで在庫更新できます。</p>
+          </div>
+        </div>
+
+        <div class="filters">
+          <input class="input" id="searchInput" placeholder="品目名・分類で検索" />
+          <select class="select" id="statusFilter">
+            <option value="">全ステータス</option>
+            <option value="low">低在庫のみ</option>
+            <option value="zero">在庫切れのみ</option>
+          </select>
+          <select class="select" id="sortFilter">
+            <option value="status">状態順</option>
+            <option value="name">名前順</option>
+            <option value="stock">在庫少ない順</option>
+          </select>
+        </div>
+
+        <div id="inventoryList"></div>
+      </section>
+
+      <aside class="stack sticky-right">
         <section class="panel section">
-                    <div class="section-head">
+          <div class="section-head">
             <div>
-              <h2>Sync Settings</h2>
-              <p>Standard sync uses the built-in GAS Web App URL. Switch to local mode only when needed.</p>
+              <h2>登録・調整</h2>
+              <p>よく使う入力だけを残して、すぐ更新できるようにしています。</p>
             </div>
           </div>
-          <div class="toolbar" style="margin-bottom:12px;">
-            <button class="chip" id="btnModeRemote" type="button">Standard Sync</button>
-            <button class="chip" id="btnModeLocal" type="button">Local Mode</button>
+
+          <div class="grid-2">
+            <form class="form-card" id="addForm">
+              <h3>新しい品目</h3>
+              <div class="field">
+                <label>分類</label>
+                <input class="input" name="category" placeholder="例: お風呂用品" required />
+              </div>
+              <div class="field">
+                <label>品目名</label>
+                <input class="input" name="name" placeholder="例: シャンプー" required />
+              </div>
+              <div class="field">
+                <label>初期在庫</label>
+                <input class="input" name="stock" type="number" min="0" step="1" value="0" required />
+              </div>
+              <div class="field">
+                <label>最低在庫</label>
+                <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
+              </div>
+              <div class="field">
+                <label>単位</label>
+                <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
+              </div>
+              <button class="btn success" type="submit">追加する</button>
+            </form>
+
+            <form class="form-card" id="adjustForm">
+              <h3>在庫調整</h3>
+              <div class="field">
+                <label>対象品目</label>
+                <input class="input" name="name" placeholder="品目名を入力" required />
+              </div>
+              <div class="field">
+                <label>増減数</label>
+                <input class="input" name="delta" type="number" step="1" value="-1" required />
+              </div>
+              <div class="field">
+                <label>メモ</label>
+                <textarea class="textarea" name="memo" rows="4" placeholder="例: 2個消費、3個入荷"></textarea>
+              </div>
+              <button class="btn primary" type="submit">反映する</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>同期設定</h2>
+              <p>標準は GAS 同期です。ローカルモードは必要なときだけ切り替えます。</p>
+            </div>
+          </div>
+          <div class="mini-chip-row" style="margin-bottom: 12px;">
+            <button class="mini-chip active" type="button" id="btnModeRemote">標準同期</button>
+            <button class="mini-chip" type="button" id="btnModeLocal">ローカルモード</button>
           </div>
           <div class="field">
-            <label>Sync URL</label>
+            <label>同期先 URL</label>
             <input class="input" id="apiInput" readonly />
+            <div class="field-help">標準同期では自動でこのURLを使います。</div>
           </div>
           <div class="toolbar" style="margin-bottom:12px;">
-            <button class="btn" id="btnLoadRemote" type="button">Load</button>
-            <button class="btn danger" id="btnClearApi" type="button">Switch to Local</button>
+            <button class="btn" id="btnLoadRemote" type="button">読み込み</button>
+            <button class="btn danger" id="btnClearApi" type="button">ローカルへ切替</button>
           </div>
           <p class="note">
-            In standard sync, the GAS Web App URL is already built in, so it works on any device without typing.
+            標準同期では、他の端末でもURL入力なしでそのまま使えます。ローカルモードは端末ごとの下書き用です。
+          </p>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>公開手順</h2>
+              <p>GitHub Pages と GAS をつなぐ最短ルートです。</p>
+            </div>
+          </div>
+          <div class="guide">
+            <div class="guide-step">`index.html` を GitHub リポジトリのルートに置く。</div>
+            <div class="guide-step">GitHub に push して、Repository Settings の Pages を有効化する。</div>
+            <div class="guide-step">Build and deployment は `Deploy from a branch`、Branch は `main`、Folder は `/ (root)` にする。</div>
+            <div class="guide-step">GAS を Web App として公開する。標準同期URLは画面に組み込み済みです。</div>
+            <div class="guide-step">LINE Bot 側は GAS の Webhook を維持しつつ、必要ならこの画面の保存ロジックを同じシートに寄せる。</div>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>操作履歴</h2>
+              <p>最近の更新や同期を残します。</p>
+            </div>
+          </div>
+          <div class="history" id="historyList"></div>
+          <p class="note">
+            もし次に進めるなら、GAS 側に `GET` と `POST` の受け口を追加して、この画面から直接在庫を更新できる形まで整えられます。
           </p>
         </section>
       </aside>
     </div>
   </div>
 
+  <button class="fab" id="fabAdd">＋ 新規追加</button>
+
+  <div class="modal-backdrop" id="quickAddBackdrop" aria-hidden="true">
+    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="quickAddTitle">
+      <div class="modal-head">
+        <div>
+          <h3 id="quickAddTitle">クイック追加</h3>
+          <p>品目名を入れて、必要なら分類を選ぶだけで素早く登録できます。</p>
+        </div>
+        <button class="btn" type="button" id="btnCloseQuickAdd">閉じる</button>
+      </div>
+
+      <form id="quickAddForm">
+        <div class="field">
+          <label>分類</label>
+          <input class="input" name="category" placeholder="例: お風呂用品" required />
+          <div class="field-help">ボタンから選ぶか、直接入力してください。</div>
+        </div>
+
+        <div class="mini-chip-row" id="modalCategoryChips" style="margin-bottom: 14px;"></div>
+
+        <div class="modal-grid">
+          <div class="field">
+            <label>品目名</label>
+            <input class="input" name="name" placeholder="例: シャンプー" required />
+          </div>
+          <div class="field">
+            <label>単位</label>
+            <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
+          </div>
+          <div class="field">
+            <label>在庫数</label>
+            <input class="input" name="stock" type="number" min="0" step="1" value="1" required />
+          </div>
+          <div class="field">
+            <label>最低在庫</label>
+            <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
+          </div>
+        </div>
+
+        <div class="modal-actions">
+          <button class="btn" type="button" id="btnQuickAddFillLast">前回の分類</button>
+          <button class="btn danger" type="button" id="btnQuickAddClear">クリア</button>
+          <button class="btn primary" type="submit">追加する</button>
+        </div>
+      </form>
+    </div>
+  </div>
+
   <script>
     const STORAGE_KEY = "inventory_console_state_v2";
-    const SYNC_MODE_KEY = "inventory_console_sync_mode_v1";
-    const CUSTOM_API_URL_KEY = "inventory_console_custom_api_url_v1";
+    const API_KEY = "inventory_console_api_url_v2";
+    const LOCAL_MODE_KEY = "inventory_console_local_mode_v1";
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx6IKSwS9-65CoZzNHUfhOgvCRB8F7YQPsikDtGJ_cw42Fay8hX2dOHTbaMR1-8riZ7/exec";
 
     const sampleInventory = [
@@ -654,6 +934,9 @@
     ];
 
     const state = loadState();
+    let syncTimer = null;
+    let syncInFlight = false;
+    let syncPending = false;
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -669,74 +952,84 @@
       connectionPill: document.getElementById("connectionPill"),
       syncState: document.getElementById("syncState"),
       lastUpdatedPill: document.getElementById("lastUpdatedPill")
+      ,
+      quickAddBackdrop: document.getElementById("quickAddBackdrop"),
+      quickAddForm: document.getElementById("quickAddForm"),
+      modalCategoryChips: document.getElementById("modalCategoryChips")
     };
-    els.apiInput.value = state.syncMode === "remote" ? getEffectiveApiUrl() : "LOCAL MODE";
+
+    els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
     render();
     bindEvents();
-    if (state.syncMode === "remote") {
-      setTimeout(() => loadRemote(), 0);
+    if (state.apiUrl) {
+      setTimeout(() => loadRemote(), 250);
     }
 
-        function loadState() {
+    renderModalCategoryChips();
+
+    function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
+        const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
         if (!raw) {
-          const syncMode = localStorage.getItem(SYNC_MODE_KEY) || "remote";
           return {
             items: structuredClone(sampleInventory),
-            history: [{ title: "初期データを読み込みました", detail: "標準同期で起動", time: new Date().toISOString() }],
-            syncMode,
-            customApiUrl: localStorage.getItem(CUSTOM_API_URL_KEY) || "",
+            history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
+            categories: [],
+            apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
             lastUpdated: new Date().toISOString(),
-            selectedCategory: "all"
+            selectedCategory: "all",
+            loadedFromRemote: false,
+            lastAddedCategory: "",
+            localMode
           };
         }
         const parsed = JSON.parse(raw);
-        const syncMode = parsed.syncMode || localStorage.getItem(SYNC_MODE_KEY) || "remote";
-        const customApiUrl = parsed.customApiUrl || localStorage.getItem(CUSTOM_API_URL_KEY) || "";
-        const legacyApiUrl = parsed.apiUrl || "";
         return {
           items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
           history: Array.isArray(parsed.history) ? parsed.history : [],
-          syncMode,
-          customApiUrl: syncMode === "remote" ? (customApiUrl || (legacyApiUrl && legacyApiUrl !== DEFAULT_API_URL ? legacyApiUrl : "")) : customApiUrl,
+          categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+          apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
-          selectedCategory: parsed.selectedCategory || "all"
+          selectedCategory: parsed.selectedCategory || "all",
+          loadedFromRemote: Boolean(parsed.loadedFromRemote),
+          lastAddedCategory: parsed.lastAddedCategory || "",
+          localMode
         };
       } catch {
-        const syncMode = localStorage.getItem(SYNC_MODE_KEY) || "remote";
+        const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
         return {
           items: structuredClone(sampleInventory),
           history: [],
-          syncMode,
-          customApiUrl: localStorage.getItem(CUSTOM_API_URL_KEY) || "",
+          categories: [],
+          apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: new Date().toISOString(),
-          selectedCategory: "all"
+          selectedCategory: "all",
+          loadedFromRemote: false,
+          lastAddedCategory: "",
+          localMode
         };
       }
     }
 
     function saveState() {
       state.lastUpdated = new Date().toISOString();
-      localStorage.setItem(SYNC_MODE_KEY, state.syncMode || "remote");
-      if (state.customApiUrl) {
-        localStorage.setItem(CUSTOM_API_URL_KEY, state.customApiUrl);
-      } else {
-        localStorage.removeItem(CUSTOM_API_URL_KEY);
+      localStorage.setItem(LOCAL_MODE_KEY, state.localMode ? "true" : "false");
+      if (!state.localMode) {
+        localStorage.setItem(API_KEY, state.apiUrl || DEFAULT_API_URL);
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderMeta();
     }
 
-    function getEffectiveApiUrl() {
-      if (state.syncMode === "remote") {
-        return state.customApiUrl || DEFAULT_API_URL;
-      }
-      return "";
-    }
-
-    function isRemoteSyncEnabled() {
-      return state.syncMode === "remote" && Boolean(getEffectiveApiUrl());
+    function queueRemoteSync(reason) {
+      if (!state.apiUrl || !state.loadedFromRemote) return;
+      syncPending = true;
+      if (syncTimer) clearTimeout(syncTimer);
+      syncTimer = setTimeout(() => {
+        syncTimer = null;
+        syncToRemote(reason || "自動同期");
+      }, 1200);
     }
 
     function log(title, detail) {
@@ -775,6 +1068,39 @@
       return state.selectedCategory || "all";
     }
 
+    function allCategories() {
+      const remoteCategories = Array.isArray(state.categories) ? state.categories.filter(Boolean) : [];
+      const itemCategories = state.items.map((item) => item.category).filter(Boolean);
+      return [...new Set([...remoteCategories, ...itemCategories])].sort((a, b) => a.localeCompare(b, "ja"));
+    }
+
+    function openQuickAdd(category = "") {
+      const form = els.quickAddForm;
+      form.category.value = category || state.lastAddedCategory || (selectedCategory() === "all" ? "" : selectedCategory());
+      if (!form.category.value) {
+        const firstCategory = allCategories()[0] || "";
+        form.category.value = firstCategory;
+      }
+      if (!form.stock.value) form.stock.value = 1;
+      if (!form.minStock.value) form.minStock.value = 1;
+      if (!form.unit.value) form.unit.value = "個";
+      els.quickAddBackdrop.classList.add("open");
+      els.quickAddBackdrop.setAttribute("aria-hidden", "false");
+      setTimeout(() => form.name.focus(), 50);
+    }
+
+    function closeQuickAdd() {
+      els.quickAddBackdrop.classList.remove("open");
+      els.quickAddBackdrop.setAttribute("aria-hidden", "true");
+    }
+
+    function renderModalCategoryChips() {
+      const categories = allCategories();
+      els.modalCategoryChips.innerHTML = categories.map((category) => (
+        `<button class="mini-chip" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
+      )).join("") || '<span class="field-help">カテゴリがまだありません</span>';
+    }
+
     function setSelectedCategory(category) {
       state.selectedCategory = category;
       saveState();
@@ -809,26 +1135,30 @@
 
     function render() {
       renderMeta();
+      renderModalCategoryChips();
       renderCategoryBar();
       renderInventory();
       renderHistory();
     }
 
-            function renderMeta() {
+    function renderMeta() {
       const total = state.items.length;
       const low = state.items.filter((item) => getStatus(item) === "low").length;
       const zero = state.items.filter((item) => getStatus(item) === "zero").length;
-      const categories = new Set(state.items.map((item) => item.category)).size;
+      const categories = allCategories().length;
       els.kpiTotal.textContent = total;
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
-      els.connectionPill.textContent = state.syncMode === "remote" ? "Standard Sync" : "Local Mode";
-      els.syncState.textContent = state.syncMode === "remote" ? "Ready" : "Saved";
+      els.connectionPill.textContent = state.loadedFromRemote ? "GAS読込済み" : (state.apiUrl ? "API設定あり" : "ローカルモード");
+      els.syncState.textContent = state.apiUrl ? "同期準備OK" : "保存済み";
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
+      document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
+      document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
     }
+
     function renderCategoryBar() {
-      const categories = [...new Set(state.items.map((item) => item.category))].sort((a, b) => a.localeCompare(b, "ja"));
+      const categories = allCategories();
       const current = selectedCategory();
       const statusCurrent = els.status.value;
       const chips = [
@@ -904,9 +1234,7 @@
           if (action === "delete") deleteItem(name);
           if (action === "focus-category") setSelectedCategory(category);
           if (action === "quick-add") {
-            const addForm = document.getElementById("addForm");
-            addForm.querySelector('[name="category"]').value = category;
-            addForm.scrollIntoView({ behavior: "smooth", block: "center" });
+            openQuickAdd(category);
           }
         });
       });
@@ -940,15 +1268,28 @@
         els.history.innerHTML = `<div class="history-item"><div><strong>まだ履歴がありません</strong><span>追加・調整・同期のたびに残ります</span></div></div>`;
         return;
       }
-      els.history.innerHTML = state.history.map((item) => `
-        <div class="history-item">
-          <div>
-            <strong>${escapeHtml(item.title)}</strong>
-            <span>${escapeHtml(item.detail)}</span>
+      els.history.innerHTML = state.history.map((item) => {
+        if (Object.prototype.hasOwnProperty.call(item, "item") || Object.prototype.hasOwnProperty.call(item, "date") || Object.prototype.hasOwnProperty.call(item, "quantity")) {
+          return `
+            <div class="history-item">
+              <div>
+                <strong>${escapeHtml(item.item || "")}</strong>
+                <span>${escapeHtml(item.date || "")} ・ ${escapeHtml(item.quantity ?? "")}</span>
+              </div>
+              <span>ConsumptionLog</span>
+            </div>
+          `;
+        }
+        return `
+          <div class="history-item">
+            <div>
+              <strong>${escapeHtml(item.title || "")}</strong>
+              <span>${escapeHtml(item.detail || "")}</span>
+            </div>
+            <span>${item.time ? new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
           </div>
-          <span>${new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
-        </div>
-      `).join("");
+        `;
+      }).join("");
     }
 
     function addItem(data) {
@@ -960,17 +1301,19 @@
         existing.unit = data.unit;
         log("既存品目を更新", `${existing.name} を更新しました`);
       } else {
-        state.items.unshift({
+      state.items.unshift({
           category: data.category,
           name: data.name,
           stock: Number(data.stock),
           minStock: Number(data.minStock),
           unit: data.unit
         });
+        state.lastAddedCategory = data.category;
         log("新規追加", `${data.name} を追加しました`);
       }
       saveState();
       render();
+      queueRemoteSync("追加");
     }
 
     function adjustStock(name, delta, label) {
@@ -983,6 +1326,7 @@
       log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
       saveState();
       render();
+      queueRemoteSync("在庫調整");
     }
 
     function editItem(name) {
@@ -1006,6 +1350,7 @@
       log("品目編集", `${item.name} を更新しました`);
       saveState();
       render();
+      queueRemoteSync("編集");
     }
 
     function deleteItem(name) {
@@ -1014,15 +1359,20 @@
       log("品目削除", `${name} を削除しました`);
       saveState();
       render();
+      queueRemoteSync("削除");
     }
 
-    async function syncToRemote() {
-      if (!isRemoteSyncEnabled()) {
-        alert("標準同期を有効にするとGASへ保存できます。");
+    async function syncToRemote(reason = "手動同期") {
+      if (!state.apiUrl) {
+        alert("先に API URL を設定してください。");
         return;
       }
-      const apiUrl = getEffectiveApiUrl();
+      if (syncInFlight) {
+        syncPending = true;
+        return;
+      }
       try {
+        syncInFlight = true;
         els.syncState.textContent = "同期中...";
         const iframeId = "inventory-sync-frame";
         let iframe = document.getElementById(iframeId);
@@ -1036,7 +1386,7 @@
 
         const form = document.createElement("form");
         form.method = "POST";
-        form.action = apiUrl;
+        form.action = state.apiUrl;
         form.target = iframeId;
         form.style.display = "none";
 
@@ -1049,9 +1399,7 @@
         payloadInput.name = "payload";
         payloadInput.value = JSON.stringify({
           items: state.items,
-          history: state.history,
-          syncMode: state.syncMode,
-          customApiUrl: state.customApiUrl
+          history: state.history
         });
         form.appendChild(payloadInput);
 
@@ -1060,59 +1408,90 @@
         setTimeout(() => {
           if (document.body.contains(form)) document.body.removeChild(form);
         }, 500);
-        log("同期", "GASへ在庫データを送信しました");
+        syncPending = false;
+        log("同期完了", `GAS へ在庫データ送信を実行しました (${reason})`);
       } catch {
-        alert("同期に失敗しました。GASのURLと公開設定を確認してください。");
+        alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
       } finally {
+        syncInFlight = false;
         renderMeta();
+        if (syncPending) {
+          syncPending = false;
+          queueRemoteSync("連続更新");
+        }
       }
     }
 
     async function loadRemote() {
-      if (!isRemoteSyncEnabled()) {
-        alert("標準同期を有効にするとGASから読み込めます。");
+      if (!state.apiUrl) {
+        alert("API URL を設定してください。");
         return;
       }
-      const apiUrl = getEffectiveApiUrl();
       try {
         els.syncState.textContent = "読み込み中...";
-        const callbackName = `inventoryRemote_${Date.now()}`;
-        window[callbackName] = (data) => {
-          try {
-            if (Array.isArray(data.items)) {
-              state.items = data.items;
-              if (Array.isArray(data.history)) state.history = data.history;
-              log("読み込み", "GASから在庫データを読み込みました");
-              saveState();
-              render();
-            } else {
-              throw new Error("invalid payload");
-            }
-          } finally {
-            delete window[callbackName];
-            const script = document.getElementById(callbackName);
-            if (script) script.remove();
-            renderMeta();
-          }
-        };
-
-        const script = document.createElement("script");
-        script.id = callbackName;
-        const joiner = apiUrl.includes("?") ? "&" : "?";
-        script.src = `${apiUrl}${joiner}action=data&callback=${callbackName}`;
-        script.onerror = () => {
-          delete window[callbackName];
-          if (script) script.remove();
-          alert("読み込みに失敗しました。GASの公開設定を確認してください。");
-          renderMeta();
-        };
-        document.head.appendChild(script);
+        const ping = await loadRemoteJsonp("ping");
+        if (!ping || ping.status !== "ok") {
+          throw new Error("ping failed");
+        }
+        const data = await loadRemoteJsonp("data");
+        if (Array.isArray(data.items)) {
+          state.items = data.items;
+          if (Array.isArray(data.history)) state.history = data.history;
+          if (Array.isArray(data.categories)) state.categories = data.categories;
+          state.loadedFromRemote = true;
+          log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
+          saveState();
+          render();
+        } else {
+          throw new Error("invalid payload");
+        }
       } catch {
-        alert("読み込みに失敗しました。GASの公開設定を確認してください。");
+        alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
       } finally {
         renderMeta();
       }
     }
+
+    function loadRemoteJsonp(action) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `inventoryRemote_${action}_${Date.now()}`;
+        let finished = false;
+        const cleanup = () => {
+          delete window[callbackName];
+          const script = document.getElementById(callbackName);
+          if (script) script.remove();
+        };
+
+        const timer = setTimeout(() => {
+          if (finished) return;
+          finished = true;
+          cleanup();
+          reject(new Error(`${action} timeout`));
+        }, 12000);
+
+        window[callbackName] = (data) => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          cleanup();
+          resolve(data);
+        };
+
+        const script = document.createElement("script");
+        script.id = callbackName;
+        const joiner = state.apiUrl.includes("?") ? "&" : "?";
+        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}`;
+        script.onerror = () => {
+          if (finished) return;
+          finished = true;
+          clearTimeout(timer);
+          cleanup();
+          reject(new Error(`${action} network error`));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
     function exportJson() {
       const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1126,46 +1505,87 @@
     }
 
     function bindEvents() {
-      document.getElementById("btnReload").addEventListener("click", async () => {
+      document.getElementById("btnReload").addEventListener("click", () => {
         const fresh = loadState();
         state.items = fresh.items;
         state.history = fresh.history;
-        state.syncMode = fresh.syncMode || "remote";
-        state.customApiUrl = fresh.customApiUrl || "";
+        state.categories = fresh.categories || [];
+        state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
         state.selectedCategory = fresh.selectedCategory;
-    els.apiInput.value = state.syncMode === "remote" ? getEffectiveApiUrl() : "LOCAL MODE";
+        state.loadedFromRemote = fresh.loadedFromRemote;
+        state.localMode = fresh.localMode;
+        els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
         render();
-        if (state.syncMode === "remote") {
-          await loadRemote();
+        if (state.apiUrl) {
+          loadRemote();
         }
       });
 
       document.getElementById("btnExport").addEventListener("click", exportJson);
       document.getElementById("btnSync").addEventListener("click", syncToRemote);
-      document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
+      document.getElementById("btnOpenQuickAdd").addEventListener("click", () => openQuickAdd());
+      document.getElementById("fabAdd").addEventListener("click", () => openQuickAdd());
+      document.getElementById("btnCloseQuickAdd").addEventListener("click", closeQuickAdd);
+      document.getElementById("btnQuickAddClear").addEventListener("click", () => {
+        els.quickAddForm.reset();
+        els.quickAddForm.stock.value = 1;
+        els.quickAddForm.minStock.value = 1;
+        els.quickAddForm.unit.value = "個";
+      });
+      document.getElementById("btnQuickAddFillLast").addEventListener("click", () => {
+        els.quickAddForm.category.value = state.lastAddedCategory || selectedCategory() || "";
+      });
 
-      document.getElementById("btnModeRemote").addEventListener("click", async () => {
-        state.syncMode = "remote";
-        if (!state.customApiUrl) {
-          state.customApiUrl = "";
+      els.quickAddBackdrop.addEventListener("click", (event) => {
+        if (event.target === els.quickAddBackdrop) closeQuickAdd();
+      });
+      els.modalCategoryChips.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-category]");
+        if (!button) return;
+        els.quickAddForm.elements.category.value = button.dataset.category || "";
+      });
+      document.addEventListener("keydown", (event) => {
+        if (event.key === "Escape" && els.quickAddBackdrop.classList.contains("open")) closeQuickAdd();
+        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
+          event.preventDefault();
+          openQuickAdd();
         }
-        els.apiInput.value = getEffectiveApiUrl();
+      });
+
+      document.getElementById("btnModeRemote").addEventListener("click", () => {
+        state.localMode = false;
+        state.apiUrl = state.apiUrl || DEFAULT_API_URL;
+        state.loadedFromRemote = false;
+        els.apiInput.value = state.apiUrl;
+        localStorage.setItem(API_KEY, state.apiUrl);
+        localStorage.setItem(LOCAL_MODE_KEY, "false");
+        log("同期設定", "標準同期に切り替えました");
         saveState();
         render();
-        await loadRemote();
+        loadRemote();
       });
 
       document.getElementById("btnModeLocal").addEventListener("click", () => {
-        state.syncMode = "local";
-        els.apiInput.value = "LOCAL MODE";
+        state.localMode = true;
+        state.apiUrl = "";
+        state.loadedFromRemote = false;
+        els.apiInput.value = "ローカルモード";
+        localStorage.setItem(LOCAL_MODE_KEY, "true");
+        log("同期設定", "ローカルモードに切り替えました");
         saveState();
         render();
       });
 
+      document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
+
       document.getElementById("btnClearApi").addEventListener("click", () => {
-        state.syncMode = "local";
-        els.apiInput.value = "LOCAL MODE";
+        state.localMode = true;
+        state.apiUrl = "";
+        state.loadedFromRemote = false;
+        els.apiInput.value = "ローカルモード";
+        localStorage.setItem(LOCAL_MODE_KEY, "true");
+        log("同期設定", "ローカルモードに切り替えました");
         saveState();
         render();
       });
@@ -1209,6 +1629,24 @@
         event.currentTarget.querySelector('[name="stock"]').value = 0;
         event.currentTarget.querySelector('[name="minStock"]').value = 1;
         event.currentTarget.querySelector('[name="unit"]').value = "個";
+      });
+
+      els.quickAddForm.addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        addItem({
+          category: form.get("category"),
+          name: form.get("name"),
+          stock: form.get("stock") || 1,
+          minStock: form.get("minStock") || 1,
+          unit: form.get("unit") || "個"
+        });
+        closeQuickAdd();
+        event.currentTarget.reset();
+        event.currentTarget.elements.category.value = state.lastAddedCategory || "";
+        event.currentTarget.elements.stock.value = 1;
+        event.currentTarget.elements.minStock.value = 1;
+        event.currentTarget.elements.unit.value = "個";
       });
 
       document.getElementById("adjustForm").addEventListener("submit", (event) => {
