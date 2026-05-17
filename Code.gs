@@ -8,15 +8,21 @@ function doGet(e) {
   var action = params.action || '';
 
   if (action === 'data') {
+    var auth = authorizeWebAppRequest_(params.idToken);
+    if (!auth.ok) return jsonpOrJson_({ status: 'error', message: auth.message }, params.callback);
     var payload = buildApiPayload_();
     return jsonpOrJson_(payload, params.callback);
   }
 
   if (action === 'rawdata') {
+    var rawAuth = authorizeWebAppRequest_(params.idToken);
+    if (!rawAuth.ok) return respondJson_({ status: 'error', message: rawAuth.message });
     return respondJson_(buildApiPayload_());
   }
 
   if (action === 'categories') {
+    var categoryAuth = authorizeWebAppRequest_(params.idToken);
+    if (!categoryAuth.ok) return jsonpOrJson_({ status: 'error', message: categoryAuth.message }, params.callback);
     return jsonpOrJson_({
       status: 'ok',
       categories: readCategories_()
@@ -57,6 +63,14 @@ function doPost(e) {
   }
 
   var action = body.action || (e && e.parameter && e.parameter.action) || '';
+
+  var auth = authorizeWebAppRequest_(body.idToken || (e && e.parameter && e.parameter.idToken));
+  if (!auth.ok) {
+    return respondJson_({
+      status: 'error',
+      message: auth.message
+    });
+  }
 
   if (action === 'saveInventory') {
     var items = Array.isArray(body.items) ? body.items : [];
@@ -139,6 +153,46 @@ function jsonpOrJson_(obj, callback) {
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
   }
   return respondJson_(obj);
+}
+
+function authorizeWebAppRequest_(idToken) {
+  var props = PropertiesService.getScriptProperties();
+  var channelId = String(props.getProperty('LIFF_CHANNEL_ID') || '').trim();
+  var allowed = String(props.getProperty('ALLOWED_LINE_USER_IDS') || '')
+    .split(',')
+    .map(function(value) { return value.trim(); })
+    .filter(function(value) { return value; });
+
+  if (!channelId || allowed.length === 0) {
+    return { ok: true, userId: '' };
+  }
+
+  if (!idToken) {
+    return { ok: false, message: 'LINE login required' };
+  }
+
+  try {
+    var res = UrlFetchApp.fetch('https://api.line.me/oauth2/v2.1/verify', {
+      method: 'post',
+      payload: {
+        id_token: idToken,
+        client_id: channelId
+      },
+      muteHttpExceptions: true
+    });
+    if (res.getResponseCode() !== 200) {
+      return { ok: false, message: 'LINE token verification failed' };
+    }
+
+    var claims = JSON.parse(res.getContentText());
+    var userId = String(claims.sub || '');
+    if (allowed.indexOf(userId) === -1) {
+      return { ok: false, message: 'This LINE account is not allowed' };
+    }
+    return { ok: true, userId: userId };
+  } catch (err) {
+    return { ok: false, message: 'LINE authorization failed' };
+  }
 }
 
 function getSheet_(sheetName) {

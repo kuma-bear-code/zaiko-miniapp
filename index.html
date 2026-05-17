@@ -4,6 +4,7 @@
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
   <title>在庫管理コンソール</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root {
       --bg: #e9f5ef;
@@ -631,6 +632,45 @@
 
     .fab:hover { transform: translateY(-1px); }
 
+    .auth-screen {
+      min-height: 100vh;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .auth-card {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 24px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    .auth-card h1 {
+      margin: 0 0 8px;
+      font-size: 22px;
+    }
+
+    .auth-card p {
+      margin: 0 0 16px;
+      color: var(--muted);
+      line-height: 1.7;
+      font-size: 14px;
+    }
+
+    body.auth-pending .app,
+    body.auth-denied .app {
+      display: none;
+    }
+
+    body.auth-pending .auth-screen,
+    body.auth-denied .auth-screen {
+      display: flex;
+    }
+
     .footer-link {
       display: inline-flex;
       align-items: center;
@@ -665,6 +705,13 @@
   </style>
 </head>
 <body>
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <h1 id="authTitle">LINEログイン確認中</h1>
+      <p id="authMessage">許可されたLINEアカウントか確認しています。</p>
+      <button class="btn primary" id="btnLineLogin" type="button" style="display:none;">LINEでログイン</button>
+    </div>
+  </div>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
@@ -922,6 +969,9 @@
     const LOCAL_MODE_KEY = "inventory_console_local_mode_v1";
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx6IKSwS9-65CoZzNHUfhOgvCRB8F7YQPsikDtGJ_cw42Fay8hX2dOHTbaMR1-8riZ7/exec";
     const AUTO_REFRESH_INTERVAL_MS = 60 * 1000;
+    // Enter your LIFF app ID here to turn on LINE login for the web app.
+    const LIFF_ID = "";
+    const LINE_AUTH_ENABLED = Boolean(LIFF_ID);
 
     const sampleInventory = [
       { category: "お風呂用品", name: "LUX コンディショナー", stock: 1, minStock: 1, unit: "回分" },
@@ -938,6 +988,7 @@
     let syncTimer = null;
     let syncInFlight = false;
     let syncPending = false;
+    let lineIdToken = "";
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -956,17 +1007,68 @@
       ,
       quickAddBackdrop: document.getElementById("quickAddBackdrop"),
       quickAddForm: document.getElementById("quickAddForm"),
-      modalCategoryChips: document.getElementById("modalCategoryChips")
+      modalCategoryChips: document.getElementById("modalCategoryChips"),
+      authTitle: document.getElementById("authTitle"),
+      authMessage: document.getElementById("authMessage"),
+      btnLineLogin: document.getElementById("btnLineLogin")
     };
 
-    els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
-    render();
-    bindEvents();
-    if (state.apiUrl && shouldAutoRefresh()) {
-      setTimeout(() => loadRemote({ silent: true }), 350);
+    startApp();
+
+    async function startApp() {
+      if (LINE_AUTH_ENABLED) {
+        document.body.classList.add("auth-pending");
+        var authed = await initializeLineAuth();
+        if (!authed) return;
+      }
+
+      document.body.classList.remove("auth-pending", "auth-denied");
+      els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
+      render();
+      bindEvents();
+      if (state.apiUrl && shouldAutoRefresh()) {
+        setTimeout(() => loadRemote({ silent: true }), 350);
+      }
+      renderModalCategoryChips();
     }
 
-    renderModalCategoryChips();
+    async function initializeLineAuth() {
+      try {
+        if (!window.liff) {
+          showAuthError("LINEログインを読み込めませんでした。通信環境を確認してください。");
+          return false;
+        }
+
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          els.authTitle.textContent = "LINEログインが必要です";
+          els.authMessage.textContent = "許可された2人だけが在庫管理を開けます。";
+          els.btnLineLogin.style.display = "inline-flex";
+          els.btnLineLogin.onclick = function() {
+            liff.login({ redirectUri: location.href });
+          };
+          return false;
+        }
+
+        lineIdToken = liff.getIDToken() || "";
+        if (!lineIdToken) {
+          showAuthError("LINE認証トークンを取得できませんでした。もう一度ログインしてください。");
+          return false;
+        }
+        return true;
+      } catch (err) {
+        showAuthError("LINEログインの初期化に失敗しました。LIFF設定を確認してください。");
+        return false;
+      }
+    }
+
+    function showAuthError(message) {
+      document.body.classList.remove("auth-pending");
+      document.body.classList.add("auth-denied");
+      els.authTitle.textContent = "アクセスできません";
+      els.authMessage.textContent = message;
+      els.btnLineLogin.style.display = "none";
+    }
 
     function loadState() {
       try {
@@ -1405,6 +1507,11 @@
         actionInput.value = "saveInventory";
         form.appendChild(actionInput);
 
+        const idTokenInput = document.createElement("textarea");
+        idTokenInput.name = "idToken";
+        idTokenInput.value = lineIdToken;
+        form.appendChild(idTokenInput);
+
         const payloadInput = document.createElement("textarea");
         payloadInput.name = "payload";
         payloadInput.value = JSON.stringify({
@@ -1495,7 +1602,7 @@
         const script = document.createElement("script");
         script.id = callbackName;
         const joiner = state.apiUrl.includes("?") ? "&" : "?";
-        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}`;
+        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}&idToken=${encodeURIComponent(lineIdToken)}`;
         script.onerror = () => {
           if (finished) return;
           finished = true;
