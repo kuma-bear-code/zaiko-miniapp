@@ -1020,6 +1020,13 @@
         document.body.classList.add("auth-pending");
         var authed = await initializeLineAuth();
         if (!authed) return;
+
+        // When LINE login is enabled, prefer the shared remote source by default.
+        if (state.localMode || !state.apiUrl) {
+          state.localMode = false;
+          state.apiUrl = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
+          saveState();
+        }
       }
 
       document.body.classList.remove("auth-pending", "auth-denied");
@@ -1027,7 +1034,7 @@
       render();
       bindEvents();
       if (state.apiUrl && shouldAutoRefresh()) {
-        setTimeout(() => loadRemote({ silent: true }), 350);
+        setTimeout(() => loadRemote({ silent: false, auto: true }), 350);
       }
       renderModalCategoryChips();
     }
@@ -1542,6 +1549,7 @@
 
     async function loadRemote(options = {}) {
       const silent = Boolean(options.silent);
+      const auto = Boolean(options.auto);
       if (!state.apiUrl) {
         if (!silent) alert("API URL を設定してください。");
         return;
@@ -1551,6 +1559,9 @@
           els.syncState.textContent = "読み込み中...";
         }
         const data = await loadRemoteJsonp("data");
+        if (data && data.status === "error") {
+          throw new Error(data.message || "remote auth error");
+        }
         if (Array.isArray(data.items)) {
           state.items = data.items;
           if (Array.isArray(data.history)) state.history = data.history;
@@ -1565,9 +1576,12 @@
         } else {
           throw new Error("invalid payload");
         }
-      } catch {
+      } catch (err) {
+        console.error("loadRemote failed", err);
         if (!silent) {
           alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
+        } else if (auto) {
+          els.syncState.textContent = "自動同期失敗";
         }
       } finally {
         renderMeta();
