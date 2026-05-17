@@ -1,0 +1,1296 @@
+<!doctype html>
+<html lang="ja">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>在庫管理コンソール</title>
+  <style>
+    :root {
+      --bg: #e9f5ef;
+      --shell: #f7fbf8;
+      --card: #ffffff;
+      --line: #d8e7dd;
+      --text: #173127;
+      --muted: #6c8577;
+      --green: #06c755;
+      --green-dark: #049544;
+      --green-soft: #dff6e8;
+      --warn: #f59e0b;
+      --danger: #ef4444;
+      --blue: #0ea5e9;
+      --shadow: 0 20px 50px rgba(18, 54, 35, 0.12);
+      --radius-xl: 28px;
+      --radius-lg: 22px;
+      --radius-md: 16px;
+      --radius-sm: 12px;
+      --font: "Noto Sans JP", "Hiragino Sans", "Yu Gothic UI", "Yu Gothic", system-ui, sans-serif;
+    }
+
+    * { box-sizing: border-box; }
+    html, body { height: 100%; }
+
+    body {
+      margin: 0;
+      font-family: var(--font);
+      color: var(--text);
+      background:
+        radial-gradient(circle at top left, rgba(6, 199, 85, 0.12), transparent 32%),
+        radial-gradient(circle at 85% 12%, rgba(14, 165, 233, 0.08), transparent 28%),
+        linear-gradient(180deg, #edf8f1 0%, #f7fbf8 42%, #eef7f2 100%);
+    }
+
+    .app {
+      max-width: 1440px;
+      margin: 0 auto;
+      padding: 24px;
+      min-height: 100%;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 12px;
+      z-index: 10;
+      margin-bottom: 18px;
+      border-radius: 26px;
+      background: linear-gradient(135deg, #09c459 0%, #06c755 46%, #18b862 100%);
+      color: white;
+      box-shadow: 0 18px 40px rgba(6, 199, 85, 0.22);
+      border: 1px solid rgba(255, 255, 255, 0.22);
+      backdrop-filter: blur(10px);
+    }
+
+    .topbar-inner {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 16px;
+      padding: 18px 20px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 14px;
+      min-width: 0;
+    }
+
+    .brand-badge {
+      width: 52px;
+      height: 52px;
+      border-radius: 18px;
+      background: rgba(255, 255, 255, 0.18);
+      display: grid;
+      place-items: center;
+      font-weight: 900;
+      font-size: 22px;
+      box-shadow: inset 0 0 0 1px rgba(255, 255, 255, 0.15);
+      flex: 0 0 auto;
+    }
+
+    .brand h1 {
+      margin: 0;
+      font-size: 21px;
+      line-height: 1.15;
+      letter-spacing: -0.01em;
+    }
+
+    .brand p {
+      margin: 4px 0 0;
+      color: rgba(255, 255, 255, 0.86);
+      font-size: 13px;
+    }
+
+    .top-actions {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 10px;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      appearance: none;
+      border: 1px solid transparent;
+      background: var(--card);
+      color: var(--text);
+      padding: 11px 14px;
+      border-radius: 999px;
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 13px;
+      transition: transform 0.15s ease, box-shadow 0.15s ease, background 0.15s ease;
+      box-shadow: 0 6px 16px rgba(18, 54, 35, 0.08);
+    }
+
+    .btn:hover { transform: translateY(-1px); }
+    .btn.primary { background: #fff; color: var(--green-dark); }
+    .btn.success { background: var(--green); color: #fff; }
+    .btn.ghost { background: rgba(255, 255, 255, 0.14); color: #fff; border-color: rgba(255, 255, 255, 0.22); box-shadow: none; }
+    .btn.danger { background: #fff1f1; color: #b91c1c; }
+
+    .shell {
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .panel {
+      background: var(--card);
+      border: 1px solid var(--line);
+      border-radius: var(--radius-xl);
+      box-shadow: var(--shadow);
+      overflow: hidden;
+    }
+
+    .hero {
+      padding: 20px;
+    }
+
+    .hero-head {
+      display: flex;
+      justify-content: space-between;
+      align-items: flex-start;
+      gap: 16px;
+      margin-bottom: 18px;
+    }
+
+    .section-title {
+      margin: 0;
+      font-size: 18px;
+      line-height: 1.25;
+    }
+
+    .section-subtitle {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .status-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      justify-content: flex-end;
+      align-items: center;
+    }
+
+    .pill {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 8px 11px;
+      border-radius: 999px;
+      font-size: 12px;
+      font-weight: 800;
+      border: 1px solid transparent;
+      white-space: nowrap;
+    }
+
+    .pill.green { background: var(--green-soft); color: #136f39; border-color: #c7ebd5; }
+    .pill.warn { background: #fff4dc; color: #9a5b00; border-color: #ffe0a3; }
+    .pill.bad { background: #ffe7e7; color: #b91c1c; border-color: #ffd1d1; }
+    .pill.blue { background: #e2f3fd; color: #16688f; border-color: #c5e8fb; }
+    .pill.gray { background: #f2f5f3; color: #4d6658; border-color: #e4ebe7; }
+
+    .kpis {
+      display: grid;
+      grid-template-columns: repeat(4, minmax(0, 1fr));
+      gap: 12px;
+    }
+
+    .kpi {
+      background: linear-gradient(180deg, #ffffff 0%, #f8fcf8 100%);
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 16px;
+      min-height: 102px;
+    }
+
+    .kpi .label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 700;
+      margin-bottom: 10px;
+    }
+
+    .kpi .value {
+      font-size: 28px;
+      font-weight: 900;
+      letter-spacing: -0.04em;
+      line-height: 1;
+    }
+
+    .kpi .sub {
+      margin-top: 8px;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .content {
+      margin-top: 18px;
+      display: grid;
+      grid-template-columns: 1.25fr 0.75fr;
+      gap: 18px;
+      align-items: start;
+    }
+
+    .stack {
+      display: grid;
+      gap: 18px;
+    }
+
+    .section {
+      padding: 18px;
+    }
+
+    .section-head {
+      display: flex;
+      align-items: flex-start;
+      justify-content: space-between;
+      gap: 12px;
+      margin-bottom: 14px;
+    }
+
+    .section-head h2 {
+      margin: 0;
+      font-size: 16px;
+      line-height: 1.3;
+    }
+
+    .section-head p {
+      margin: 6px 0 0;
+      color: var(--muted);
+      font-size: 13px;
+      line-height: 1.7;
+    }
+
+    .filters {
+      display: grid;
+      grid-template-columns: 1.25fr 0.55fr 0.55fr;
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .input, .select, .textarea {
+      width: 100%;
+      border-radius: 16px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      padding: 13px 14px;
+      outline: none;
+      font: inherit;
+      box-shadow: inset 0 1px 0 rgba(255, 255, 255, 0.8);
+    }
+
+    .input::placeholder, .textarea::placeholder { color: #94a99d; }
+    .input:focus, .select:focus, .textarea:focus {
+      border-color: rgba(6, 199, 85, 0.55);
+      box-shadow: 0 0 0 4px rgba(6, 199, 85, 0.12);
+    }
+
+    .category-bar {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      margin-bottom: 14px;
+    }
+
+    .category-chip {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      padding: 10px 13px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      cursor: pointer;
+      font-weight: 800;
+      color: var(--text);
+      transition: transform 0.15s ease, box-shadow 0.15s ease, border-color 0.15s ease;
+      box-shadow: 0 6px 14px rgba(18, 54, 35, 0.04);
+    }
+
+    .category-chip:hover { transform: translateY(-1px); }
+    .category-chip.active {
+      background: var(--green);
+      border-color: var(--green);
+      color: #fff;
+      box-shadow: 0 10px 20px rgba(6, 199, 85, 0.16);
+    }
+
+    .category-chip small {
+      opacity: 0.8;
+      font-weight: 700;
+    }
+
+    .category-group {
+      margin-bottom: 14px;
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      overflow: hidden;
+      background: linear-gradient(180deg, #fff 0%, #fbfefb 100%);
+    }
+
+    .category-group-head {
+      display: flex;
+      align-items: center;
+      justify-content: space-between;
+      gap: 12px;
+      padding: 14px 16px;
+      background: linear-gradient(135deg, #f6fff8 0%, #eefaf1 100%);
+      border-bottom: 1px solid var(--line);
+    }
+
+    .category-group-head h3 {
+      margin: 0;
+      font-size: 15px;
+    }
+
+    .category-group-head p {
+      margin: 4px 0 0;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .category-group-body {
+      padding: 12px;
+      display: grid;
+      gap: 10px;
+    }
+
+    .item-card {
+      display: grid;
+      grid-template-columns: 1.5fr auto auto;
+      gap: 12px;
+      align-items: center;
+      padding: 13px 14px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: #fff;
+    }
+
+    .item-main {
+      min-width: 0;
+    }
+
+    .item-main strong {
+      display: block;
+      font-size: 14px;
+      line-height: 1.35;
+      margin-bottom: 4px;
+    }
+
+    .item-meta {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+      color: var(--muted);
+      font-size: 12px;
+    }
+
+    .item-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .mini {
+      padding: 8px 11px;
+      border-radius: 999px;
+      border: 1px solid var(--line);
+      background: #fff;
+      color: var(--text);
+      cursor: pointer;
+      font-weight: 800;
+      font-size: 12px;
+    }
+
+    .mini.green { background: var(--green-soft); border-color: #c7ebd5; color: #136f39; }
+    .mini.red { background: #ffecec; border-color: #ffd3d3; color: #b91c1c; }
+    .mini.gray { background: #f4f7f5; border-color: #e1e8e3; color: #4d6658; }
+    .mini.blue { background: #e8f6fe; border-color: #cce9fb; color: #16688f; }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 20px;
+      color: var(--muted);
+      background: #fcfefd;
+      text-align: center;
+    }
+
+    .grid-2 {
+      display: grid;
+      grid-template-columns: 1fr 1fr;
+      gap: 12px;
+    }
+
+    .form-card {
+      border: 1px solid var(--line);
+      border-radius: 22px;
+      background: linear-gradient(180deg, #fff 0%, #fafefb 100%);
+      padding: 16px;
+    }
+
+    .form-card h3 {
+      margin: 0 0 12px;
+      font-size: 15px;
+    }
+
+    .field {
+      display: grid;
+      gap: 8px;
+      margin-bottom: 12px;
+    }
+
+    .field label {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+    }
+
+    .history {
+      display: grid;
+      gap: 10px;
+    }
+
+    .history-item {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 13px 14px;
+      background: #fff;
+      display: flex;
+      justify-content: space-between;
+      gap: 10px;
+    }
+
+    .history-item strong { display: block; margin-bottom: 4px; }
+    .history-item span { color: var(--muted); font-size: 12px; }
+
+    .guide {
+      display: grid;
+      gap: 10px;
+      counter-reset: guide;
+    }
+
+    .guide-step {
+      position: relative;
+      padding: 13px 14px 13px 48px;
+      border-radius: 18px;
+      border: 1px solid var(--line);
+      background: #fff;
+      line-height: 1.6;
+      color: var(--text);
+      font-size: 13px;
+    }
+
+    .guide-step::before {
+      counter-increment: guide;
+      content: counter(guide);
+      position: absolute;
+      left: 14px;
+      top: 13px;
+      width: 24px;
+      height: 24px;
+      border-radius: 999px;
+      display: grid;
+      place-items: center;
+      background: var(--green-soft);
+      color: #136f39;
+      font-weight: 900;
+      font-size: 12px;
+    }
+
+    .note {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.8;
+      margin-top: 10px;
+    }
+
+    .footer-link {
+      display: inline-flex;
+      align-items: center;
+      gap: 8px;
+      font-size: 12px;
+      font-weight: 800;
+      color: var(--green-dark);
+      text-decoration: none;
+    }
+
+    .sticky-right {
+      position: sticky;
+      top: 102px;
+    }
+
+    @media (max-width: 1120px) {
+      .shell, .content { grid-template-columns: 1fr; }
+      .kpis { grid-template-columns: repeat(2, minmax(0, 1fr)); }
+      .item-card { grid-template-columns: 1fr; }
+      .item-actions { justify-content: flex-start; }
+    }
+
+    @media (max-width: 720px) {
+      .app { padding: 14px; }
+      .topbar { top: 0; border-radius: 0 0 22px 22px; }
+      .topbar-inner { flex-direction: column; align-items: flex-start; }
+      .filters, .grid-2, .kpis { grid-template-columns: 1fr; }
+      .hero-head, .section-head { flex-direction: column; align-items: flex-start; }
+      .status-row { justify-content: flex-start; }
+      .sticky-right { position: static; }
+    }
+  </style>
+</head>
+<body>
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-badge">L</div>
+          <div>
+            <h1>在庫管理コンソール</h1>
+            <p>LINE風の見た目で、カテゴリごとの在庫をすぐ把握できる画面</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <button class="btn ghost" id="btnReload">再読み込み</button>
+          <button class="btn ghost" id="btnExport">JSON出力</button>
+          <button class="btn primary" id="btnSync">GASへ同期</button>
+        </div>
+      </div>
+    </header>
+
+    <div class="shell">
+      <section class="panel hero">
+        <div class="hero-head">
+          <div>
+            <h2 class="section-title">全体サマリー</h2>
+            <p class="section-subtitle">
+              カテゴリごとの在庫状況を、ボタンひとつで切り替えて見られます。<br>
+              低在庫と在庫切れは強く見えるようにしています。
+            </p>
+          </div>
+          <div class="status-row">
+            <span class="pill green" id="connectionPill">ローカルモード</span>
+            <span class="pill gray" id="syncState">保存済み</span>
+            <span class="pill blue" id="lastUpdatedPill">-</span>
+          </div>
+        </div>
+
+        <div class="kpis" style="margin-bottom:14px;">
+          <div class="kpi">
+            <div class="label">総品目数</div>
+            <div class="value" id="kpiTotal">0</div>
+            <div class="sub">登録されている全品目</div>
+          </div>
+          <div class="kpi">
+            <div class="label">低在庫</div>
+            <div class="value" id="kpiLow">0</div>
+            <div class="sub">最低在庫を下回る品目</div>
+          </div>
+          <div class="kpi">
+            <div class="label">在庫切れ</div>
+            <div class="value" id="kpiZero">0</div>
+            <div class="sub">補充が必要な品目</div>
+          </div>
+          <div class="kpi">
+            <div class="label">カテゴリ数</div>
+            <div class="value" id="kpiCategories">0</div>
+            <div class="sub">分類の種類</div>
+          </div>
+        </div>
+
+        <div class="section-head">
+          <div>
+            <h2>カテゴリボタン</h2>
+            <p>押すとそのカテゴリだけに絞り込めます。全体・低在庫・在庫切れもワンタップです。</p>
+          </div>
+        </div>
+        <div class="category-bar" id="categoryBar"></div>
+
+        <div class="section-head" style="margin-top:6px;">
+          <div>
+            <h2>在庫一覧</h2>
+            <p>検索と条件で絞り込んだあと、各品目のボタンで在庫更新できます。</p>
+          </div>
+        </div>
+
+        <div class="filters">
+          <input class="input" id="searchInput" placeholder="品目名・分類で検索" />
+          <select class="select" id="statusFilter">
+            <option value="">全ステータス</option>
+            <option value="low">低在庫のみ</option>
+            <option value="zero">在庫切れのみ</option>
+          </select>
+          <select class="select" id="sortFilter">
+            <option value="status">状態順</option>
+            <option value="name">名前順</option>
+            <option value="stock">在庫少ない順</option>
+          </select>
+        </div>
+
+        <div id="inventoryList"></div>
+      </section>
+
+      <aside class="stack sticky-right">
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>登録・調整</h2>
+              <p>よく使う入力だけを残して、すぐ更新できるようにしています。</p>
+            </div>
+          </div>
+
+          <div class="grid-2">
+            <form class="form-card" id="addForm">
+              <h3>新しい品目</h3>
+              <div class="field">
+                <label>分類</label>
+                <input class="input" name="category" placeholder="例: お風呂用品" required />
+              </div>
+              <div class="field">
+                <label>品目名</label>
+                <input class="input" name="name" placeholder="例: シャンプー" required />
+              </div>
+              <div class="field">
+                <label>初期在庫</label>
+                <input class="input" name="stock" type="number" min="0" step="1" value="0" required />
+              </div>
+              <div class="field">
+                <label>最低在庫</label>
+                <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
+              </div>
+              <div class="field">
+                <label>単位</label>
+                <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
+              </div>
+              <button class="btn success" type="submit">追加する</button>
+            </form>
+
+            <form class="form-card" id="adjustForm">
+              <h3>在庫調整</h3>
+              <div class="field">
+                <label>対象品目</label>
+                <input class="input" name="name" placeholder="品目名を入力" required />
+              </div>
+              <div class="field">
+                <label>増減数</label>
+                <input class="input" name="delta" type="number" step="1" value="-1" required />
+              </div>
+              <div class="field">
+                <label>メモ</label>
+                <textarea class="textarea" name="memo" rows="4" placeholder="例: 2個消費、3個入荷"></textarea>
+              </div>
+              <button class="btn primary" type="submit">反映する</button>
+            </form>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>同期設定</h2>
+              <p>GAS の Web App をつないで、GitHub Pages から実データを扱えます。</p>
+            </div>
+          </div>
+          <div class="field">
+            <label>API URL</label>
+            <input class="input" id="apiInput" placeholder="https://script.google.com/macros/s/..." />
+          </div>
+          <div class="toolbar" style="margin-bottom:12px;">
+            <button class="btn" id="btnSaveApi" type="button">保存</button>
+            <button class="btn" id="btnLoadRemote" type="button">読み込み</button>
+            <button class="btn danger" id="btnClearApi" type="button">解除</button>
+          </div>
+          <p class="note">
+            まずはローカル保存で使えます。GAS 側を `doGet` / `doPost` で公開すると、一覧の読み込みと保存ができるようになります。
+          </p>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>公開手順</h2>
+              <p>GitHub Pages と GAS をつなぐ最短ルートです。</p>
+            </div>
+          </div>
+          <div class="guide">
+            <div class="guide-step">`index.html` を GitHub リポジトリのルートに置く。</div>
+            <div class="guide-step">GitHub に push して、Repository Settings の Pages を有効化する。</div>
+            <div class="guide-step">Build and deployment は `Deploy from a branch`、Branch は `main`、Folder は `/ (root)` にする。</div>
+            <div class="guide-step">GAS を Web App として公開し、この画面の `API URL` にその URL を入れる。</div>
+            <div class="guide-step">LINE Bot 側は GAS の Webhook を維持しつつ、必要ならこの画面の保存ロジックを同じシートに寄せる。</div>
+          </div>
+        </section>
+
+        <section class="panel section">
+          <div class="section-head">
+            <div>
+              <h2>操作履歴</h2>
+              <p>最近の更新や同期を残します。</p>
+            </div>
+          </div>
+          <div class="history" id="historyList"></div>
+          <p class="note">
+            もし次に進めるなら、GAS 側に `GET` と `POST` の受け口を追加して、この画面から直接在庫を更新できる形まで整えられます。
+          </p>
+        </section>
+      </aside>
+    </div>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "inventory_console_state_v2";
+    const API_KEY = "inventory_console_api_url_v2";
+
+    const sampleInventory = [
+      { category: "お風呂用品", name: "LUX コンディショナー", stock: 1, minStock: 1, unit: "回分" },
+      { category: "お風呂用品", name: "LUX シャンプー", stock: 1, minStock: 1, unit: "回分" },
+      { category: "お風呂用品", name: "お風呂掃除スポンジ", stock: 1, minStock: 1, unit: "個" },
+      { category: "お風呂用品", name: "かずきシャンプー", stock: 3, minStock: 1, unit: "本" },
+      { category: "お風呂用品", name: "みくシャンプー", stock: 0, minStock: 1, unit: "本" },
+      { category: "キッチン", name: "ラップ", stock: 2, minStock: 1, unit: "本" },
+      { category: "キッチン", name: "クッキングペーパー", stock: 0, minStock: 1, unit: "箱" },
+      { category: "消耗品", name: "ティッシュ", stock: 0, minStock: 2, unit: "箱" }
+    ];
+
+    const state = loadState();
+    const els = {
+      list: document.getElementById("inventoryList"),
+      history: document.getElementById("historyList"),
+      search: document.getElementById("searchInput"),
+      status: document.getElementById("statusFilter"),
+      sort: document.getElementById("sortFilter"),
+      categoryBar: document.getElementById("categoryBar"),
+      apiInput: document.getElementById("apiInput"),
+      kpiTotal: document.getElementById("kpiTotal"),
+      kpiLow: document.getElementById("kpiLow"),
+      kpiZero: document.getElementById("kpiZero"),
+      kpiCategories: document.getElementById("kpiCategories"),
+      connectionPill: document.getElementById("connectionPill"),
+      syncState: document.getElementById("syncState"),
+      lastUpdatedPill: document.getElementById("lastUpdatedPill")
+    };
+
+    els.apiInput.value = state.apiUrl || "";
+    render();
+    bindEvents();
+
+    function loadState() {
+      try {
+        const raw = localStorage.getItem(STORAGE_KEY);
+        if (!raw) {
+          return {
+            items: structuredClone(sampleInventory),
+            history: [{ title: "初期データを読み込みました", detail: "ローカルモードで起動", time: new Date().toISOString() }],
+            apiUrl: localStorage.getItem(API_KEY) || "",
+            lastUpdated: new Date().toISOString(),
+            selectedCategory: "all"
+          };
+        }
+        const parsed = JSON.parse(raw);
+        return {
+          items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
+          history: Array.isArray(parsed.history) ? parsed.history : [],
+          apiUrl: parsed.apiUrl || localStorage.getItem(API_KEY) || "",
+          lastUpdated: parsed.lastUpdated || new Date().toISOString(),
+          selectedCategory: parsed.selectedCategory || "all"
+        };
+      } catch {
+        return {
+          items: structuredClone(sampleInventory),
+          history: [],
+          apiUrl: localStorage.getItem(API_KEY) || "",
+          lastUpdated: new Date().toISOString(),
+          selectedCategory: "all"
+        };
+      }
+    }
+
+    function saveState() {
+      state.lastUpdated = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
+      renderMeta();
+    }
+
+    function log(title, detail) {
+      state.history.unshift({ title, detail, time: new Date().toISOString() });
+      state.history = state.history.slice(0, 10);
+      saveState();
+      renderHistory();
+    }
+
+    function normalize(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function getStatus(item) {
+      if (item.stock <= 0) return "zero";
+      if (item.stock < item.minStock) return "low";
+      return "ok";
+    }
+
+    function statusLabel(status) {
+      if (status === "zero") return '<span class="pill bad">在庫切れ</span>';
+      if (status === "low") return '<span class="pill warn">低在庫</span>';
+      return '<span class="pill green">正常</span>';
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+
+    function selectedCategory() {
+      return state.selectedCategory || "all";
+    }
+
+    function setSelectedCategory(category) {
+      state.selectedCategory = category;
+      saveState();
+      render();
+    }
+
+    function getVisibleItems() {
+      const q = normalize(els.search.value);
+      const statusFilter = els.status.value;
+      const categoryFilter = selectedCategory();
+      const items = state.items.filter((item) => {
+        const matchesQuery = !q || normalize(item.name).includes(q) || normalize(item.category).includes(q);
+        const matchesStatus = !statusFilter || getStatus(item) === statusFilter;
+        const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
+        return matchesQuery && matchesStatus && matchesCategory;
+      });
+
+      const sortKey = els.sort.value;
+      if (sortKey === "name") {
+        items.sort((a, b) => a.name.localeCompare(b.name, "ja"));
+      } else if (sortKey === "stock") {
+        items.sort((a, b) => a.stock - b.stock);
+      } else {
+        const order = { zero: 0, low: 1, ok: 2 };
+        items.sort((a, b) => {
+          const diff = order[getStatus(a)] - order[getStatus(b)];
+          return diff !== 0 ? diff : a.name.localeCompare(b.name, "ja");
+        });
+      }
+      return items;
+    }
+
+    function render() {
+      renderMeta();
+      renderCategoryBar();
+      renderInventory();
+      renderHistory();
+    }
+
+    function renderMeta() {
+      const total = state.items.length;
+      const low = state.items.filter((item) => getStatus(item) === "low").length;
+      const zero = state.items.filter((item) => getStatus(item) === "zero").length;
+      const categories = new Set(state.items.map((item) => item.category)).size;
+      els.kpiTotal.textContent = total;
+      els.kpiLow.textContent = low;
+      els.kpiZero.textContent = zero;
+      els.kpiCategories.textContent = categories;
+      els.connectionPill.textContent = state.apiUrl ? "API設定あり" : "ローカルモード";
+      els.syncState.textContent = state.apiUrl ? "同期準備OK" : "保存済み";
+      els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
+    }
+
+    function renderCategoryBar() {
+      const categories = [...new Set(state.items.map((item) => item.category))].sort((a, b) => a.localeCompare(b, "ja"));
+      const current = selectedCategory();
+      const statusCurrent = els.status.value;
+      const chips = [
+        { key: "all", label: "すべて" },
+        { key: "low", label: "低在庫" },
+        { key: "zero", label: "在庫切れ" }
+      ];
+
+      chips.push(...categories.map((category) => ({
+        key: category,
+        label: category,
+        count: state.items.filter((item) => item.category === category).length
+      })));
+
+      els.categoryBar.innerHTML = chips.map((chip) => {
+        const active = chip.key === current ||
+          (chip.key === "low" && statusCurrent === "low") ||
+          (chip.key === "zero" && statusCurrent === "zero");
+        const countText = chip.count !== undefined ? ` <small>${chip.count}</small>` : "";
+        return `<button class="category-chip ${active ? "active" : ""}" data-category="${escapeHtml(chip.key)}">${escapeHtml(chip.label)}${countText}</button>`;
+      }).join("");
+    }
+
+    function renderInventory() {
+      const visible = getVisibleItems();
+      if (!visible.length) {
+        els.list.innerHTML = `
+          <div class="empty">
+            条件に一致する品目はありません。<br>
+            検索やカテゴリを変えるか、新しい品目を追加してください。
+          </div>
+        `;
+        return;
+      }
+
+      const groups = [];
+      const categories = [...new Set(visible.map((item) => item.category))];
+
+      categories.forEach((category) => {
+        const items = visible.filter((item) => item.category === category);
+        const low = items.filter((item) => getStatus(item) === "low").length;
+        const zero = items.filter((item) => getStatus(item) === "zero").length;
+        const normal = items.length - low - zero;
+
+        groups.push(`
+          <article class="category-group">
+            <div class="category-group-head">
+              <div>
+                <h3>${escapeHtml(category)}</h3>
+                <p>${items.length}品目 ・ 正常 ${normal} / 低在庫 ${low} / 在庫切れ ${zero}</p>
+              </div>
+              <div class="toolbar">
+                <button class="mini green" data-action="focus-category" data-category="${escapeHtml(category)}">このカテゴリ</button>
+                <button class="mini gray" data-action="quick-add" data-category="${escapeHtml(category)}">このカテゴリに追加</button>
+              </div>
+            </div>
+            <div class="category-group-body">
+              ${items.map(renderItemCard).join("")}
+            </div>
+          </article>
+        `);
+      });
+
+      els.list.innerHTML = groups.join("");
+      els.list.querySelectorAll("button[data-action]").forEach((button) => {
+        button.addEventListener("click", () => {
+          const action = button.dataset.action;
+          const name = button.dataset.name;
+          const category = button.dataset.category;
+          if (action === "inc") adjustStock(name, 1, "在庫を1増やしました");
+          if (action === "dec") adjustStock(name, -1, "在庫を1減らしました");
+          if (action === "edit") editItem(name);
+          if (action === "delete") deleteItem(name);
+          if (action === "focus-category") setSelectedCategory(category);
+          if (action === "quick-add") {
+            const addForm = document.getElementById("addForm");
+            addForm.querySelector('[name="category"]').value = category;
+            addForm.scrollIntoView({ behavior: "smooth", block: "center" });
+          }
+        });
+      });
+    }
+
+    function renderItemCard(item) {
+      const status = getStatus(item);
+      return `
+        <div class="item-card">
+          <div class="item-main">
+            <strong>${escapeHtml(item.name)}</strong>
+            <div class="item-meta">
+              <span>${escapeHtml(item.category)}</span>
+              <span>在庫 ${item.stock}${escapeHtml(item.unit)}</span>
+              <span>最低 ${item.minStock}${escapeHtml(item.unit)}</span>
+            </div>
+          </div>
+          <div>${statusLabel(status)}</div>
+          <div class="item-actions">
+            <button class="mini green" data-action="inc" data-name="${escapeHtml(item.name)}">+1</button>
+            <button class="mini red" data-action="dec" data-name="${escapeHtml(item.name)}">-1</button>
+            <button class="mini blue" data-action="edit" data-name="${escapeHtml(item.name)}">編集</button>
+            <button class="mini gray" data-action="delete" data-name="${escapeHtml(item.name)}">削除</button>
+          </div>
+        </div>
+      `;
+    }
+
+    function renderHistory() {
+      if (!state.history.length) {
+        els.history.innerHTML = `<div class="history-item"><div><strong>まだ履歴がありません</strong><span>追加・調整・同期のたびに残ります</span></div></div>`;
+        return;
+      }
+      els.history.innerHTML = state.history.map((item) => `
+        <div class="history-item">
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.detail)}</span>
+          </div>
+          <span>${new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
+        </div>
+      `).join("");
+    }
+
+    function addItem(data) {
+      const existing = state.items.find((item) => normalize(item.name) === normalize(data.name));
+      if (existing) {
+        existing.category = data.category;
+        existing.stock = Number(data.stock);
+        existing.minStock = Number(data.minStock);
+        existing.unit = data.unit;
+        log("既存品目を更新", `${existing.name} を更新しました`);
+      } else {
+        state.items.unshift({
+          category: data.category,
+          name: data.name,
+          stock: Number(data.stock),
+          minStock: Number(data.minStock),
+          unit: data.unit
+        });
+        log("新規追加", `${data.name} を追加しました`);
+      }
+      saveState();
+      render();
+    }
+
+    function adjustStock(name, delta, label) {
+      const item = state.items.find((row) => normalize(row.name) === normalize(name));
+      if (!item) {
+        alert("対象品目が見つかりませんでした。");
+        return;
+      }
+      item.stock = Math.max(0, Number(item.stock) + Number(delta));
+      log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
+      saveState();
+      render();
+    }
+
+    function editItem(name) {
+      const item = state.items.find((row) => normalize(row.name) === normalize(name));
+      if (!item) return;
+      const category = prompt("分類", item.category);
+      if (category === null) return;
+      const newName = prompt("品目名", item.name);
+      if (newName === null) return;
+      const stock = prompt("在庫数", String(item.stock));
+      if (stock === null) return;
+      const minStock = prompt("最低在庫", String(item.minStock));
+      if (minStock === null) return;
+      const unit = prompt("単位", item.unit);
+      if (unit === null) return;
+      item.category = category.trim() || item.category;
+      item.name = newName.trim() || item.name;
+      item.stock = Math.max(0, parseInt(stock, 10) || 0);
+      item.minStock = Math.max(0, parseInt(minStock, 10) || 0);
+      item.unit = unit.trim() || item.unit;
+      log("品目編集", `${item.name} を更新しました`);
+      saveState();
+      render();
+    }
+
+    function deleteItem(name) {
+      if (!confirm(`「${name}」を削除しますか？`)) return;
+      state.items = state.items.filter((row) => normalize(row.name) !== normalize(name));
+      log("品目削除", `${name} を削除しました`);
+      saveState();
+      render();
+    }
+
+    async function syncToRemote() {
+      if (!state.apiUrl) {
+        alert("先に API URL を設定してください。");
+        return;
+      }
+      try {
+        els.syncState.textContent = "同期中...";
+        const iframeId = "inventory-sync-frame";
+        let iframe = document.getElementById(iframeId);
+        if (!iframe) {
+          iframe = document.createElement("iframe");
+          iframe.id = iframeId;
+          iframe.name = iframeId;
+          iframe.style.display = "none";
+          document.body.appendChild(iframe);
+        }
+
+        const form = document.createElement("form");
+        form.method = "POST";
+        form.action = state.apiUrl;
+        form.target = iframeId;
+        form.style.display = "none";
+
+        const actionInput = document.createElement("input");
+        actionInput.name = "action";
+        actionInput.value = "saveInventory";
+        form.appendChild(actionInput);
+
+        const payloadInput = document.createElement("textarea");
+        payloadInput.name = "payload";
+        payloadInput.value = JSON.stringify({
+          items: state.items,
+          history: state.history
+        });
+        form.appendChild(payloadInput);
+
+        document.body.appendChild(form);
+        form.submit();
+        setTimeout(() => {
+          if (document.body.contains(form)) document.body.removeChild(form);
+        }, 500);
+        log("同期完了", "GAS へ在庫データ送信を実行しました");
+        alert("同期を送信しました。GAS 側で保存されます。");
+      } catch {
+        alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
+      } finally {
+        renderMeta();
+      }
+    }
+
+    async function loadRemote() {
+      if (!state.apiUrl) {
+        alert("API URL を設定してください。");
+        return;
+      }
+      try {
+        els.syncState.textContent = "読み込み中...";
+        const callbackName = `inventoryRemote_${Date.now()}`;
+        window[callbackName] = (data) => {
+          try {
+            if (Array.isArray(data.items)) {
+              state.items = data.items;
+              if (Array.isArray(data.history)) state.history = data.history;
+              log("読み込み完了", "GAS から在庫データを取得しました");
+              saveState();
+              render();
+            } else {
+              throw new Error("invalid payload");
+            }
+          } finally {
+            delete window[callbackName];
+            const script = document.getElementById(callbackName);
+            if (script) script.remove();
+            renderMeta();
+          }
+        };
+
+        const script = document.createElement("script");
+        script.id = callbackName;
+        const joiner = state.apiUrl.includes("?") ? "&" : "?";
+        script.src = `${state.apiUrl}${joiner}action=data&callback=${callbackName}`;
+        script.onerror = () => {
+          delete window[callbackName];
+          if (script) script.remove();
+          alert("読み込みに失敗しました。API の返却形式を確認してください。");
+          renderMeta();
+        };
+        document.head.appendChild(script);
+      } catch {
+        alert("読み込みに失敗しました。API の返却形式を確認してください。");
+      } finally {
+        renderMeta();
+      }
+    }
+
+    function exportJson() {
+      const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
+      const url = URL.createObjectURL(blob);
+      const a = document.createElement("a");
+      a.href = url;
+      a.download = "inventory-console-export.json";
+      a.click();
+      URL.revokeObjectURL(url);
+      log("JSON出力", "現在の在庫データをエクスポートしました");
+      saveState();
+    }
+
+    function bindEvents() {
+      document.getElementById("btnReload").addEventListener("click", () => {
+        const fresh = loadState();
+        state.items = fresh.items;
+        state.history = fresh.history;
+        state.apiUrl = fresh.apiUrl;
+        state.lastUpdated = fresh.lastUpdated;
+        state.selectedCategory = fresh.selectedCategory;
+        els.apiInput.value = state.apiUrl || "";
+        render();
+      });
+
+      document.getElementById("btnExport").addEventListener("click", exportJson);
+      document.getElementById("btnSync").addEventListener("click", syncToRemote);
+
+      document.getElementById("btnSaveApi").addEventListener("click", () => {
+        state.apiUrl = els.apiInput.value.trim();
+        localStorage.setItem(API_KEY, state.apiUrl);
+        log("API設定", state.apiUrl ? "API URL を保存しました" : "API URL を空にしました");
+        saveState();
+        render();
+      });
+
+      document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
+
+      document.getElementById("btnClearApi").addEventListener("click", () => {
+        state.apiUrl = "";
+        els.apiInput.value = "";
+        localStorage.removeItem(API_KEY);
+        log("API解除", "API URL を削除しました");
+        saveState();
+        render();
+      });
+
+      els.search.addEventListener("input", renderInventory);
+      els.status.addEventListener("change", renderInventory);
+      els.sort.addEventListener("change", renderInventory);
+
+      els.categoryBar.addEventListener("click", (event) => {
+        const button = event.target.closest("button[data-category]");
+        if (!button) return;
+        const category = button.dataset.category;
+        if (category === "low") {
+          state.selectedCategory = "all";
+          els.status.value = "low";
+        } else if (category === "zero") {
+          state.selectedCategory = "all";
+          els.status.value = "zero";
+        } else if (category === "all") {
+          state.selectedCategory = "all";
+          els.status.value = "";
+        } else {
+          state.selectedCategory = category;
+          els.status.value = "";
+        }
+        saveState();
+        render();
+      });
+
+      document.getElementById("addForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        addItem({
+          category: form.get("category"),
+          name: form.get("name"),
+          stock: form.get("stock"),
+          minStock: form.get("minStock"),
+          unit: form.get("unit")
+        });
+        event.currentTarget.reset();
+        event.currentTarget.querySelector('[name="stock"]').value = 0;
+        event.currentTarget.querySelector('[name="minStock"]').value = 1;
+        event.currentTarget.querySelector('[name="unit"]').value = "個";
+      });
+
+      document.getElementById("adjustForm").addEventListener("submit", (event) => {
+        event.preventDefault();
+        const form = new FormData(event.currentTarget);
+        adjustStock(form.get("name"), Number(form.get("delta")), form.get("memo") || "在庫調整");
+        event.currentTarget.reset();
+        event.currentTarget.querySelector('[name="delta"]').value = -1;
+      });
+    }
+  </script>
+</body>
+</html>
