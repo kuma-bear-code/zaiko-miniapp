@@ -243,10 +243,20 @@
     }
 
     .forecast-card {
+      appearance: none;
+      width: 100%;
+      text-align: left;
       border: 1px solid var(--line);
       border-radius: 20px;
       padding: 14px 16px;
       background: linear-gradient(180deg, #ffffff 0%, #f8fcf8 100%);
+      cursor: pointer;
+      transition: transform 0.16s ease, box-shadow 0.16s ease, border-color 0.16s ease;
+    }
+
+    .forecast-card:hover {
+      transform: translateY(-1px);
+      box-shadow: 0 14px 30px rgba(17, 47, 30, 0.08);
     }
 
     .forecast-card strong {
@@ -269,6 +279,11 @@
     .forecast-card.danger {
       background: linear-gradient(180deg, #fff4f4 0%, #fffdfd 100%);
       border-color: #ffd1d1;
+    }
+
+    .forecast-card.active {
+      border-color: #06c755;
+      box-shadow: 0 0 0 2px rgba(6, 199, 85, 0.12);
     }
 
     .content {
@@ -851,14 +866,14 @@
         </div>
 
         <div class="forecast-summary" id="forecastSummary">
-          <div class="forecast-card warn">
+          <button class="forecast-card warn" id="forecast14Card" type="button" data-forecast-filter="forecast14">
             <strong>2週間以内に切れそう</strong>
             <span id="forecast14Text">消費ログを集計すると表示されます。</span>
-          </div>
-          <div class="forecast-card danger">
+          </button>
+          <button class="forecast-card danger" id="forecast7Card" type="button" data-forecast-filter="forecast7">
             <strong>1週間以内に切れそう</strong>
             <span id="forecast7Text">消費ログを集計すると表示されます。</span>
-          </div>
+          </button>
         </div>
 
         <div class="section-head">
@@ -1090,6 +1105,8 @@
       sort: document.getElementById("sortFilter"),
       categoryBar: document.getElementById("categoryBar"),
       apiInput: document.getElementById("apiInput"),
+      forecast14Card: document.getElementById("forecast14Card"),
+      forecast7Card: document.getElementById("forecast7Card"),
       kpiTotal: document.getElementById("kpiTotal"),
       kpiLow: document.getElementById("kpiLow"),
       kpiZero: document.getElementById("kpiZero"),
@@ -1202,7 +1219,7 @@
           items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-          forecasts: Array.isArray(parsed.forecasts) ? parsed.forecasts : [],
+          forecasts: normalizeForecasts(parsed.forecasts),
           summary: parsed.summary || null,
           apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
@@ -1289,6 +1306,50 @@
         .replaceAll("'", "&#39;");
     }
 
+    function formatForecastDateValue(value) {
+      if (!value) return "";
+      if (typeof value === "string" && /^\d{4}-\d{2}-\d{2}$/.test(value)) return value;
+      const date = new Date(value);
+      if (Number.isNaN(date.getTime())) return "";
+      return date.toLocaleDateString("sv-SE");
+    }
+
+    function normalizeForecast(forecast) {
+      if (!forecast || !forecast.name) return null;
+      const daysPerUnitRaw = Number(forecast.daysPerUnit);
+      const daysPerUnit = Number.isFinite(daysPerUnitRaw) && daysPerUnitRaw > 0
+        ? Number(daysPerUnitRaw.toFixed(1))
+        : null;
+      const daysLeftRaw = Number.isFinite(Number(forecast.daysLeft))
+        ? Number(forecast.daysLeft)
+        : Number(forecast.daysToMin);
+      const daysLeft = Number.isFinite(daysLeftRaw) ? Math.max(0, Math.ceil(daysLeftRaw)) : null;
+      const targetDate = formatForecastDateValue(forecast.targetDate || forecast.nextPurchaseDate);
+      return {
+        name: String(forecast.name || ""),
+        category: String(forecast.category || "未分類"),
+        unit: String(forecast.unit || "個"),
+        stock: Number(forecast.stock || 0),
+        minStock: Number(forecast.minStock || 0),
+        daysPerUnit,
+        daysLeft,
+        targetDate,
+        sampleCount: Number(forecast.sampleCount || 0)
+      };
+    }
+
+    function normalizeForecasts(forecasts) {
+      if (!Array.isArray(forecasts)) return [];
+      return forecasts
+        .map(normalizeForecast)
+        .filter(Boolean)
+        .sort((a, b) => {
+          const daysA = Number.isFinite(a.daysLeft) ? a.daysLeft : Number.POSITIVE_INFINITY;
+          const daysB = Number.isFinite(b.daysLeft) ? b.daysLeft : Number.POSITIVE_INFINITY;
+          return daysA - daysB || a.name.localeCompare(b.name, "ja");
+        });
+    }
+
     function getForecastForItem(item) {
       if (!Array.isArray(state.forecasts)) return null;
       const key = normalize(item.name);
@@ -1297,6 +1358,7 @@
 
     function forecastBadgeClass(forecast) {
       if (!forecast) return "muted";
+      if (!Number.isFinite(forecast.daysLeft)) return "muted";
       if (forecast.daysLeft <= 7) return "danger";
       if (forecast.daysLeft <= 14) return "warn";
       return "ok";
@@ -1304,33 +1366,39 @@
 
     function formatForecastText(forecast) {
       if (!forecast) return "消費ログ不足";
+      if (!Number.isFinite(forecast.daysLeft)) return "予測準備中";
       if (forecast.daysLeft <= 0) return "残り 0日";
       return `残り ${forecast.daysLeft}日`;
     }
 
     function formatForecastDetail(forecast) {
       if (!forecast) return "消費ログが2件以上たまると予測します";
-      return `${forecast.targetDate}ごろ / 1${forecast.unit}あたり約${forecast.daysPerUnit}日`;
+      const pace = Number.isFinite(forecast.daysPerUnit) ? `1${forecast.unit}あたり約${forecast.daysPerUnit}日` : "消費ログを集計中";
+      const dateText = forecast.targetDate ? `${forecast.targetDate}ごろ` : "時期を推定中";
+      return `${dateText} / ${pace}`;
     }
 
     function refreshForecastsFromItems() {
       if (!Array.isArray(state.forecasts) || !state.forecasts.length) return;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
-      state.forecasts = state.forecasts.map((forecast) => {
+      state.forecasts = normalizeForecasts(state.forecasts.map((forecast) => {
         const item = state.items.find((row) => normalize(row.name) === normalize(forecast.name));
         if (!item || !forecast.daysPerUnit) return forecast;
         const stock = Number(item.stock || 0);
-        const daysLeft = stock <= 0 ? 0 : Math.ceil(stock * Number(forecast.daysPerUnit));
+        const minStock = Number(item.minStock || 0);
+        const available = Math.max(0, stock - minStock);
+        const daysLeft = available <= 0 ? 0 : Math.ceil(available * Number(forecast.daysPerUnit));
         const targetDate = new Date(today);
         targetDate.setDate(targetDate.getDate() + daysLeft);
         return {
           ...forecast,
           stock,
+          minStock,
           daysLeft,
           targetDate: targetDate.toLocaleDateString("sv-SE")
         };
-      }).sort((a, b) => a.daysLeft - b.daysLeft);
+      }));
     }
 
     function selectedCategory() {
@@ -1386,8 +1454,8 @@
         const matchesStatus =
           !statusFilter ||
           getStatus(item) === statusFilter ||
-          (statusFilter === "forecast14" && forecast && forecast.daysLeft <= 14) ||
-          (statusFilter === "forecast7" && forecast && forecast.daysLeft <= 7);
+          (statusFilter === "forecast14" && forecast && Number.isFinite(forecast.daysLeft) && forecast.daysLeft <= 14) ||
+          (statusFilter === "forecast7" && forecast && Number.isFinite(forecast.daysLeft) && forecast.daysLeft <= 7);
         const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
         return matchesQuery && matchesStatus && matchesCategory;
       });
@@ -1401,8 +1469,8 @@
         items.sort((a, b) => {
           const forecastA = getForecastForItem(a);
           const forecastB = getForecastForItem(b);
-          const daysA = forecastA ? forecastA.daysLeft : Number.POSITIVE_INFINITY;
-          const daysB = forecastB ? forecastB.daysLeft : Number.POSITIVE_INFINITY;
+          const daysA = forecastA && Number.isFinite(forecastA.daysLeft) ? forecastA.daysLeft : Number.POSITIVE_INFINITY;
+          const daysB = forecastB && Number.isFinite(forecastB.daysLeft) ? forecastB.daysLeft : Number.POSITIVE_INFINITY;
           return daysA - daysB || a.name.localeCompare(b.name, "ja");
         });
       } else {
@@ -1441,9 +1509,13 @@
     }
 
     function renderForecastSummary() {
-      const forecasts = Array.isArray(state.forecasts) ? state.forecasts : [];
+      const forecasts = Array.isArray(state.forecasts)
+        ? state.forecasts.filter((forecast) => Number.isFinite(forecast.daysLeft))
+        : [];
       const within14 = forecasts.filter((forecast) => forecast.daysLeft <= 14);
       const within7 = forecasts.filter((forecast) => forecast.daysLeft <= 7);
+      els.forecast14Card.classList.toggle("active", els.status.value === "forecast14");
+      els.forecast7Card.classList.toggle("active", els.status.value === "forecast7");
 
       if (!within14.length) {
         els.forecast14Text.textContent = "今のところ、2週間以内に切れそうな品目はありません。";
@@ -1766,8 +1838,9 @@
           state.items = data.items;
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
-          if (Array.isArray(data.forecasts)) state.forecasts = data.forecasts;
+          if (Array.isArray(data.forecasts)) state.forecasts = normalizeForecasts(data.forecasts);
           if (data.summary) state.summary = data.summary;
+          refreshForecastsFromItems();
           state.loadedFromRemote = true;
           state.lastRemoteLoadedAt = new Date().toISOString();
           appliedRemoteData = true;
@@ -1859,7 +1932,7 @@
         state.items = fresh.items;
         state.history = fresh.history;
         state.categories = fresh.categories || [];
-        state.forecasts = fresh.forecasts || [];
+        state.forecasts = normalizeForecasts(fresh.forecasts);
         state.summary = fresh.summary || null;
         state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
@@ -1937,6 +2010,16 @@
       });
 
       document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
+      document.getElementById("forecastSummary").addEventListener("click", (event) => {
+        const button = event.target.closest("[data-forecast-filter]");
+        if (!button) return;
+        const nextFilter = button.dataset.forecastFilter || "";
+        els.status.value = els.status.value === nextFilter ? "" : nextFilter;
+        els.sort.value = "forecast";
+        state.selectedCategory = "all";
+        saveState();
+        render();
+      });
 
       document.getElementById("btnClearApi").addEventListener("click", () => {
         state.localMode = true;
@@ -1952,7 +2035,7 @@
       });
 
       els.search.addEventListener("input", renderInventory);
-      els.status.addEventListener("change", renderInventory);
+      els.status.addEventListener("change", render);
       els.sort.addEventListener("change", renderInventory);
 
       els.categoryBar.addEventListener("click", (event) => {
