@@ -235,6 +235,42 @@
       font-size: 12px;
     }
 
+    .forecast-summary {
+      display: grid;
+      grid-template-columns: repeat(2, minmax(0, 1fr));
+      gap: 12px;
+      margin: 14px 0 16px;
+    }
+
+    .forecast-card {
+      border: 1px solid var(--line);
+      border-radius: 20px;
+      padding: 14px 16px;
+      background: linear-gradient(180deg, #ffffff 0%, #f8fcf8 100%);
+    }
+
+    .forecast-card strong {
+      display: block;
+      font-size: 15px;
+      margin-bottom: 6px;
+    }
+
+    .forecast-card span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .forecast-card.warn {
+      background: linear-gradient(180deg, #fff9ee 0%, #fffdf8 100%);
+      border-color: #ffe1aa;
+    }
+
+    .forecast-card.danger {
+      background: linear-gradient(180deg, #fff4f4 0%, #fffdfd 100%);
+      border-color: #ffd1d1;
+    }
+
     .content {
       margin-top: 18px;
       display: grid;
@@ -397,6 +433,49 @@
       align-items: center;
       color: var(--muted);
       font-size: 12px;
+    }
+
+    .item-forecast {
+      margin-top: 9px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      align-items: center;
+    }
+
+    .forecast-badge {
+      display: inline-flex;
+      align-items: center;
+      gap: 6px;
+      padding: 6px 10px;
+      border-radius: 999px;
+      font-size: 11px;
+      font-weight: 800;
+      border: 1px solid transparent;
+    }
+
+    .forecast-badge.ok {
+      background: #eef8f1;
+      color: #15603a;
+      border-color: #cde7d6;
+    }
+
+    .forecast-badge.warn {
+      background: #fff4dc;
+      color: #9a5b00;
+      border-color: #ffd98b;
+    }
+
+    .forecast-badge.danger {
+      background: #ffe9e9;
+      color: #b42318;
+      border-color: #ffc9c9;
+    }
+
+    .forecast-badge.muted {
+      background: #f2f5f3;
+      color: #5f776a;
+      border-color: #dbe6df;
     }
 
     .item-actions {
@@ -771,6 +850,17 @@
           </div>
         </div>
 
+        <div class="forecast-summary" id="forecastSummary">
+          <div class="forecast-card warn">
+            <strong>2週間以内に切れそう</strong>
+            <span id="forecast14Text">消費ログを集計すると表示されます。</span>
+          </div>
+          <div class="forecast-card danger">
+            <strong>1週間以内に切れそう</strong>
+            <span id="forecast7Text">消費ログを集計すると表示されます。</span>
+          </div>
+        </div>
+
         <div class="section-head">
           <div>
             <h2>カテゴリボタン</h2>
@@ -792,11 +882,14 @@
             <option value="">全ステータス</option>
             <option value="low">低在庫のみ</option>
             <option value="zero">在庫切れのみ</option>
+            <option value="forecast14">2週間以内に切れそう</option>
+            <option value="forecast7">1週間以内に切れそう</option>
           </select>
           <select class="select" id="sortFilter">
             <option value="status">状態順</option>
             <option value="name">名前順</option>
             <option value="stock">在庫少ない順</option>
+            <option value="forecast">切れそう順</option>
           </select>
         </div>
 
@@ -1001,6 +1094,8 @@
       kpiLow: document.getElementById("kpiLow"),
       kpiZero: document.getElementById("kpiZero"),
       kpiCategories: document.getElementById("kpiCategories"),
+      forecast14Text: document.getElementById("forecast14Text"),
+      forecast7Text: document.getElementById("forecast7Text"),
       connectionPill: document.getElementById("connectionPill"),
       syncState: document.getElementById("syncState"),
       lastUpdatedPill: document.getElementById("lastUpdatedPill")
@@ -1091,6 +1186,8 @@
             items: structuredClone(sampleInventory),
             history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
             categories: [],
+            forecasts: [],
+            summary: null,
             apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
             lastUpdated: new Date().toISOString(),
             selectedCategory: "all",
@@ -1105,6 +1202,8 @@
           items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+          forecasts: Array.isArray(parsed.forecasts) ? parsed.forecasts : [],
+          summary: parsed.summary || null,
           apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
           selectedCategory: parsed.selectedCategory || "all",
@@ -1119,6 +1218,8 @@
           items: structuredClone(sampleInventory),
           history: [],
           categories: [],
+          forecasts: [],
+          summary: null,
           apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: new Date().toISOString(),
           selectedCategory: "all",
@@ -1188,6 +1289,50 @@
         .replaceAll("'", "&#39;");
     }
 
+    function getForecastForItem(item) {
+      if (!Array.isArray(state.forecasts)) return null;
+      const key = normalize(item.name);
+      return state.forecasts.find((forecast) => normalize(forecast.name) === key) || null;
+    }
+
+    function forecastBadgeClass(forecast) {
+      if (!forecast) return "muted";
+      if (forecast.daysLeft <= 7) return "danger";
+      if (forecast.daysLeft <= 14) return "warn";
+      return "ok";
+    }
+
+    function formatForecastText(forecast) {
+      if (!forecast) return "消費ログ不足";
+      if (forecast.daysLeft <= 0) return "残り 0日";
+      return `残り ${forecast.daysLeft}日`;
+    }
+
+    function formatForecastDetail(forecast) {
+      if (!forecast) return "消費ログが2件以上たまると予測します";
+      return `${forecast.targetDate}ごろ / 1${forecast.unit}あたり約${forecast.daysPerUnit}日`;
+    }
+
+    function refreshForecastsFromItems() {
+      if (!Array.isArray(state.forecasts) || !state.forecasts.length) return;
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      state.forecasts = state.forecasts.map((forecast) => {
+        const item = state.items.find((row) => normalize(row.name) === normalize(forecast.name));
+        if (!item || !forecast.daysPerUnit) return forecast;
+        const stock = Number(item.stock || 0);
+        const daysLeft = stock <= 0 ? 0 : Math.ceil(stock * Number(forecast.daysPerUnit));
+        const targetDate = new Date(today);
+        targetDate.setDate(targetDate.getDate() + daysLeft);
+        return {
+          ...forecast,
+          stock,
+          daysLeft,
+          targetDate: targetDate.toLocaleDateString("sv-SE")
+        };
+      }).sort((a, b) => a.daysLeft - b.daysLeft);
+    }
+
     function selectedCategory() {
       return state.selectedCategory || "all";
     }
@@ -1237,7 +1382,12 @@
       const categoryFilter = selectedCategory();
       const items = state.items.filter((item) => {
         const matchesQuery = !q || normalize(item.name).includes(q) || normalize(item.category).includes(q);
-        const matchesStatus = !statusFilter || getStatus(item) === statusFilter;
+        const forecast = getForecastForItem(item);
+        const matchesStatus =
+          !statusFilter ||
+          getStatus(item) === statusFilter ||
+          (statusFilter === "forecast14" && forecast && forecast.daysLeft <= 14) ||
+          (statusFilter === "forecast7" && forecast && forecast.daysLeft <= 7);
         const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
         return matchesQuery && matchesStatus && matchesCategory;
       });
@@ -1247,6 +1397,14 @@
         items.sort((a, b) => a.name.localeCompare(b.name, "ja"));
       } else if (sortKey === "stock") {
         items.sort((a, b) => a.stock - b.stock);
+      } else if (sortKey === "forecast") {
+        items.sort((a, b) => {
+          const forecastA = getForecastForItem(a);
+          const forecastB = getForecastForItem(b);
+          const daysA = forecastA ? forecastA.daysLeft : Number.POSITIVE_INFINITY;
+          const daysB = forecastB ? forecastB.daysLeft : Number.POSITIVE_INFINITY;
+          return daysA - daysB || a.name.localeCompare(b.name, "ja");
+        });
       } else {
         const order = { zero: 0, low: 1, ok: 2 };
         items.sort((a, b) => {
@@ -1260,6 +1418,7 @@
     function render() {
       renderMeta();
       renderModalCategoryChips();
+      renderForecastSummary();
       renderCategoryBar();
       renderInventory();
       renderHistory();
@@ -1279,6 +1438,26 @@
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
       document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
       document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
+    }
+
+    function renderForecastSummary() {
+      const forecasts = Array.isArray(state.forecasts) ? state.forecasts : [];
+      const within14 = forecasts.filter((forecast) => forecast.daysLeft <= 14);
+      const within7 = forecasts.filter((forecast) => forecast.daysLeft <= 7);
+
+      if (!within14.length) {
+        els.forecast14Text.textContent = "今のところ、2週間以内に切れそうな品目はありません。";
+      } else {
+        const names = within14.slice(0, 3).map((forecast) => `${forecast.name}(${forecast.daysLeft}日)`);
+        els.forecast14Text.textContent = `${within14.length}件: ${names.join(" / ")}`;
+      }
+
+      if (!within7.length) {
+        els.forecast7Text.textContent = "今のところ、1週間以内に切れそうな品目はありません。";
+      } else {
+        const names = within7.slice(0, 3).map((forecast) => `${forecast.name}(${forecast.daysLeft}日)`);
+        els.forecast7Text.textContent = `${within7.length}件: ${names.join(" / ")}`;
+      }
     }
 
     function renderCategoryBar() {
@@ -1366,6 +1545,7 @@
 
     function renderItemCard(item) {
       const status = getStatus(item);
+      const forecast = getForecastForItem(item);
       return `
         <div class="item-card">
           <div class="item-main">
@@ -1374,6 +1554,10 @@
               <span>${escapeHtml(item.category)}</span>
               <span>在庫 ${item.stock}${escapeHtml(item.unit)}</span>
               <span>最低 ${item.minStock}${escapeHtml(item.unit)}</span>
+            </div>
+            <div class="item-forecast">
+              <span class="forecast-badge ${forecastBadgeClass(forecast)}">${escapeHtml(formatForecastText(forecast))}</span>
+              <span class="forecast-badge muted">${escapeHtml(formatForecastDetail(forecast))}</span>
             </div>
           </div>
           <div>${statusLabel(status)}</div>
@@ -1435,6 +1619,7 @@
         state.lastAddedCategory = data.category;
         log("新規追加", `${data.name} を追加しました`);
       }
+      refreshForecastsFromItems();
       saveState();
       render();
       queueRemoteSync("追加");
@@ -1448,6 +1633,7 @@
       }
       item.stock = Math.max(0, Number(item.stock) + Number(delta));
       log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
+      refreshForecastsFromItems();
       saveState();
       render();
       queueRemoteSync("在庫調整");
@@ -1472,6 +1658,7 @@
       item.minStock = Math.max(0, parseInt(minStock, 10) || 0);
       item.unit = unit.trim() || item.unit;
       log("品目編集", `${item.name} を更新しました`);
+      refreshForecastsFromItems();
       saveState();
       render();
       queueRemoteSync("編集");
@@ -1480,6 +1667,7 @@
     function deleteItem(name) {
       if (!confirm(`「${name}」を削除しますか？`)) return;
       state.items = state.items.filter((row) => normalize(row.name) !== normalize(name));
+      state.forecasts = (state.forecasts || []).filter((forecast) => normalize(forecast.name) !== normalize(name));
       log("品目削除", `${name} を削除しました`);
       saveState();
       render();
@@ -1578,6 +1766,8 @@
           state.items = data.items;
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
+          if (Array.isArray(data.forecasts)) state.forecasts = data.forecasts;
+          if (data.summary) state.summary = data.summary;
           state.loadedFromRemote = true;
           state.lastRemoteLoadedAt = new Date().toISOString();
           appliedRemoteData = true;
@@ -1669,6 +1859,8 @@
         state.items = fresh.items;
         state.history = fresh.history;
         state.categories = fresh.categories || [];
+        state.forecasts = fresh.forecasts || [];
+        state.summary = fresh.summary || null;
         state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
         state.selectedCategory = fresh.selectedCategory;
