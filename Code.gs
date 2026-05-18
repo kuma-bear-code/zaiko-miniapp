@@ -1,4 +1,4 @@
-﻿// =======================================================
+// =======================================================
 // LINE x Spreadsheet Inventory BOT + Web App API
 // - LINE group operation flow stays as the primary behavior
 // - GitHub Pages / LIFF app can read and write through doGet/doPost
