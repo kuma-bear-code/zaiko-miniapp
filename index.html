@@ -1013,6 +1013,7 @@
       btnLineLogin: document.getElementById("btnLineLogin")
     };
     let remoteLoadPromise = null;
+    let isRemoteLoading = false;
 
     startApp();
 
@@ -1032,6 +1033,9 @@
 
       document.body.classList.remove("auth-pending", "auth-denied");
       els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
+      if (state.apiUrl && shouldAutoRefresh()) {
+        isRemoteLoading = true;
+      }
       render();
       bindEvents();
       if (state.apiUrl && shouldAutoRefresh()) {
@@ -1271,7 +1275,7 @@
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
       els.connectionPill.textContent = state.loadedFromRemote ? "GAS読込済み" : (state.apiUrl ? "API設定あり" : "ローカルモード");
-      els.syncState.textContent = state.apiUrl ? "同期準備OK" : "保存済み";
+      els.syncState.textContent = isRemoteLoading ? "読み込み中..." : (state.apiUrl ? "同期準備OK" : "保存済み");
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
       document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
       document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
@@ -1555,6 +1559,8 @@
         if (!silent) alert("API URL を設定してください。");
         return;
       }
+      isRemoteLoading = true;
+      renderMeta();
       if (remoteLoadPromise) {
         return remoteLoadPromise;
       }
@@ -1589,6 +1595,7 @@
           els.syncState.textContent = "自動同期失敗";
         }
       } finally {
+        isRemoteLoading = false;
         renderMeta();
       }
       })();
@@ -1664,6 +1671,9 @@
         state.lastRemoteLoadedAt = fresh.lastRemoteLoadedAt || "";
         state.localMode = fresh.localMode;
         els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
+        if (state.apiUrl) {
+          isRemoteLoading = true;
+        }
         render();
         if (state.apiUrl) {
           loadRemote();
@@ -1706,6 +1716,7 @@
         state.apiUrl = state.apiUrl || DEFAULT_API_URL;
         state.loadedFromRemote = false;
         state.lastRemoteLoadedAt = "";
+        isRemoteLoading = false;
         els.apiInput.value = state.apiUrl;
         localStorage.setItem(API_KEY, state.apiUrl);
         localStorage.setItem(LOCAL_MODE_KEY, "false");
@@ -1720,6 +1731,7 @@
         state.apiUrl = "";
         state.loadedFromRemote = false;
         state.lastRemoteLoadedAt = "";
+        isRemoteLoading = false;
         els.apiInput.value = "ローカルモード";
         localStorage.setItem(LOCAL_MODE_KEY, "true");
         log("同期設定", "ローカルモードに切り替えました");
@@ -1734,6 +1746,7 @@
         state.apiUrl = "";
         state.loadedFromRemote = false;
         state.lastRemoteLoadedAt = "";
+        isRemoteLoading = false;
         els.apiInput.value = "ローカルモード";
         localStorage.setItem(LOCAL_MODE_KEY, "true");
         log("同期設定", "ローカルモードに切り替えました");
