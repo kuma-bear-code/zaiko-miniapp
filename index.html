@@ -1012,6 +1012,7 @@
       authMessage: document.getElementById("authMessage"),
       btnLineLogin: document.getElementById("btnLineLogin")
     };
+    let remoteLoadPromise = null;
 
     startApp();
 
@@ -1034,7 +1035,7 @@
       render();
       bindEvents();
       if (state.apiUrl && shouldAutoRefresh()) {
-        setTimeout(() => loadRemote({ silent: false, auto: true }), 350);
+        setTimeout(() => loadRemote({ silent: true, auto: true }), 350);
       }
       renderModalCategoryChips();
     }
@@ -1554,6 +1555,10 @@
         if (!silent) alert("API URL を設定してください。");
         return;
       }
+      if (remoteLoadPromise) {
+        return remoteLoadPromise;
+      }
+      remoteLoadPromise = (async () => {
       try {
         if (!silent) {
           els.syncState.textContent = "読み込み中...";
@@ -1578,13 +1583,19 @@
         }
       } catch (err) {
         console.error("loadRemote failed", err);
-        if (!silent) {
+        if (!silent && !auto) {
           alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
         } else if (auto) {
           els.syncState.textContent = "自動同期失敗";
         }
       } finally {
         renderMeta();
+      }
+      })();
+      try {
+        return await remoteLoadPromise;
+      } finally {
+        remoteLoadPromise = null;
       }
     }
 
