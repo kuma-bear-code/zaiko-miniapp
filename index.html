@@ -1555,6 +1555,7 @@
     async function loadRemote(options = {}) {
       const silent = Boolean(options.silent);
       const auto = Boolean(options.auto);
+      let appliedRemoteData = false;
       if (!state.apiUrl) {
         if (!silent) alert("API URL を設定してください。");
         return;
@@ -1579,6 +1580,7 @@
           if (Array.isArray(data.categories)) state.categories = data.categories;
           state.loadedFromRemote = true;
           state.lastRemoteLoadedAt = new Date().toISOString();
+          appliedRemoteData = true;
           if (!silent) {
             log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
           }
@@ -1589,6 +1591,10 @@
         }
       } catch (err) {
         console.error("loadRemote failed", err);
+        if (appliedRemoteData) {
+          console.warn("remote data was applied, so suppressing load alert");
+          return;
+        }
         if (!silent && !auto) {
           alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
         } else if (auto) {
