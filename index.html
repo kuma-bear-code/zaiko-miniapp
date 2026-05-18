@@ -1595,10 +1595,9 @@
           console.warn("remote data was applied, so suppressing load alert");
           return;
         }
-        if (!silent && !auto) {
-          alert("読み込みに失敗しました。GAS の公開設定、再デプロイ、または返却形式を確認してください。");
-        } else if (auto) {
-          els.syncState.textContent = "自動同期失敗";
+        els.syncState.textContent = auto ? "自動同期失敗" : "読み込み失敗";
+        if (!silent) {
+          log("読み込み失敗", "GAS からの取得に失敗しました。少し待って再読み込みしてください。");
         }
       } finally {
         isRemoteLoading = false;
