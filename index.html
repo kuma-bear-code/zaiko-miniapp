@@ -3,8 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>在庫管理コンソール</title>
-  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <title>蝨ｨ蠎ｫ邂｡逅・さ繝ｳ繧ｽ繝ｼ繝ｫ</title>
   <style>
     :root {
       --bg: #e9f5ef;
@@ -106,13 +105,6 @@
       flex-wrap: wrap;
       gap: 10px;
       justify-content: flex-end;
-    }
-
-    .top-actions .btn.add {
-      background: #fff;
-      color: var(--green-dark);
-      border-color: transparent;
-      box-shadow: 0 10px 20px rgba(255, 255, 255, 0.18);
     }
 
     .btn {
@@ -485,6 +477,66 @@
     .history-item strong { display: block; margin-bottom: 4px; }
     .history-item span { color: var(--muted); font-size: 12px; }
 
+    .forecast-list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .forecast-item {
+      border: 1px solid var(--line);
+      border-radius: 18px;
+      padding: 12px 14px;
+      background: linear-gradient(180deg, #ffffff 0%, #f9fefb 100%);
+      display: grid;
+      gap: 4px;
+    }
+
+    .forecast-item strong {
+      font-size: 14px;
+      line-height: 1.35;
+    }
+
+    .forecast-item span {
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.6;
+    }
+
+    .forecast-item.hot {
+      border-color: #ffd0cf;
+      background: linear-gradient(180deg, #fff7f7 0%, #fffdfd 100%);
+    }
+
+    .forecast-item.warn {
+      border-color: #ffe0a3;
+      background: linear-gradient(180deg, #fffaf0 0%, #fffdf7 100%);
+    }
+
+    .forecast-item.ok {
+      border-color: #cdebd8;
+    }
+
+    .forecast-empty {
+      border: 1px dashed var(--line);
+      border-radius: 18px;
+      padding: 14px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.7;
+      background: #fcfefd;
+    }
+
+    .item-insight {
+      margin-top: 8px;
+      font-size: 12px;
+      line-height: 1.6;
+      color: var(--muted);
+    }
+
+    .item-insight strong {
+      color: var(--text);
+    }
+
     .guide {
       display: grid;
       gap: 10px;
@@ -526,182 +578,6 @@
       margin-top: 10px;
     }
 
-    .modal-backdrop {
-      position: fixed;
-      inset: 0;
-      background: rgba(9, 22, 14, 0.46);
-      backdrop-filter: blur(8px);
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 18px;
-      z-index: 50;
-    }
-
-    .modal-backdrop.open { display: flex; }
-
-    .modal {
-      width: min(680px, 100%);
-      max-height: min(92vh, 880px);
-      overflow: auto;
-      border-radius: 28px;
-      background: #fff;
-      border: 1px solid var(--line);
-      box-shadow: 0 24px 80px rgba(17, 47, 30, 0.24);
-      padding: 18px;
-    }
-
-    .modal-head {
-      display: flex;
-      align-items: flex-start;
-      justify-content: space-between;
-      gap: 12px;
-      margin-bottom: 14px;
-    }
-
-    .modal-head h3 {
-      margin: 0;
-      font-size: 18px;
-    }
-
-    .modal-head p {
-      margin: 4px 0 0;
-      color: var(--muted);
-      font-size: 13px;
-      line-height: 1.7;
-    }
-
-    .modal-grid {
-      display: grid;
-      grid-template-columns: 1fr 1fr;
-      gap: 12px;
-    }
-
-    .field-help {
-      font-size: 12px;
-      color: var(--muted);
-      margin-top: 2px;
-    }
-
-    .mini-chip-row {
-      display: flex;
-      flex-wrap: wrap;
-      gap: 8px;
-    }
-
-    .mini-chip {
-      border: 1px solid var(--line);
-      background: #fff;
-      color: var(--text);
-      border-radius: 999px;
-      padding: 8px 12px;
-      cursor: pointer;
-      font-weight: 800;
-      font-size: 12px;
-    }
-
-    .mini-chip.active {
-      background: var(--green-soft);
-      border-color: #c7ebd5;
-      color: #136f39;
-    }
-
-    .modal-actions {
-      display: flex;
-      gap: 10px;
-      justify-content: flex-end;
-      margin-top: 16px;
-      flex-wrap: wrap;
-    }
-
-    .fab {
-      position: fixed;
-      right: 20px;
-      bottom: 20px;
-      z-index: 40;
-      padding: 14px 18px;
-      border-radius: 999px;
-      border: none;
-      background: linear-gradient(135deg, #09c459 0%, #06c755 60%, #18b862 100%);
-      color: #fff;
-      font-weight: 900;
-      font-size: 14px;
-      cursor: pointer;
-      box-shadow: 0 18px 40px rgba(6, 199, 85, 0.26);
-    }
-
-    .fab:hover { transform: translateY(-1px); }
-
-    .toast {
-      position: fixed;
-      left: 50%;
-      bottom: 20px;
-      transform: translate(-50%, 16px);
-      z-index: 80;
-      min-width: min(420px, calc(100vw - 28px));
-      max-width: calc(100vw - 28px);
-      border-radius: 16px;
-      border: 1px solid var(--line);
-      background: rgba(255, 255, 255, 0.96);
-      box-shadow: 0 18px 44px rgba(21, 53, 35, 0.18);
-      color: var(--text);
-      padding: 13px 15px;
-      font-size: 13px;
-      font-weight: 800;
-      line-height: 1.55;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.2s ease, transform 0.2s ease;
-    }
-
-    .toast.show {
-      opacity: 1;
-      transform: translate(-50%, 0);
-    }
-
-    .toast.good { border-color: #bdebd0; }
-    .toast.warn { border-color: #f8d991; }
-    .toast.bad { border-color: #fecaca; }
-
-    .auth-screen {
-      min-height: 100vh;
-      display: none;
-      align-items: center;
-      justify-content: center;
-      padding: 24px;
-    }
-
-    .auth-card {
-      width: min(420px, 100%);
-      background: #fff;
-      border: 1px solid var(--line);
-      border-radius: 24px;
-      box-shadow: var(--shadow);
-      padding: 22px;
-    }
-
-    .auth-card h1 {
-      margin: 0 0 8px;
-      font-size: 22px;
-    }
-
-    .auth-card p {
-      margin: 0 0 16px;
-      color: var(--muted);
-      line-height: 1.7;
-      font-size: 14px;
-    }
-
-    body.auth-pending .app,
-    body.auth-denied .app {
-      display: none;
-    }
-
-    body.auth-pending .auth-screen,
-    body.auth-denied .auth-screen {
-      display: flex;
-    }
-
     .footer-link {
       display: inline-flex;
       align-items: center;
@@ -736,28 +612,20 @@
   </style>
 </head>
 <body>
-  <div class="auth-screen" id="authScreen">
-    <div class="auth-card">
-      <h1 id="authTitle">LINEログイン確認中</h1>
-      <p id="authMessage">許可されたLINEアカウントか確認しています。</p>
-      <button class="btn primary" id="btnLineLogin" type="button" style="display:none;">LINEでログイン</button>
-    </div>
-  </div>
   <div class="app">
     <header class="topbar">
       <div class="topbar-inner">
         <div class="brand">
           <div class="brand-badge">L</div>
           <div>
-            <h1>在庫管理コンソール</h1>
-            <p>LINE風の見た目で、カテゴリごとの在庫をすぐ把握できる画面</p>
+            <h1>蝨ｨ蠎ｫ邂｡逅・さ繝ｳ繧ｽ繝ｼ繝ｫ</h1>
+            <p>LINE鬚ｨ縺ｮ隕九◆逶ｮ縺ｧ縲√き繝・ざ繝ｪ縺斐→縺ｮ蝨ｨ蠎ｫ繧偵☆縺先滑謠｡縺ｧ縺阪ｋ逕ｻ髱｢</p>
           </div>
         </div>
         <div class="top-actions">
-          <button class="btn add" id="btnOpenQuickAdd">＋追加</button>
-          <button class="btn ghost" id="btnReload">再読み込み</button>
-          <button class="btn ghost" id="btnExport">JSON出力</button>
-          <button class="btn primary" id="btnSync">GASへ同期</button>
+          <button class="btn ghost" id="btnReload">蜀崎ｪｭ縺ｿ霎ｼ縺ｿ</button>
+          <button class="btn ghost" id="btnExport">JSON蜃ｺ蜉・/button>
+          <button class="btn primary" id="btnSync">GAS縺ｸ蜷梧悄</button>
         </div>
       </div>
     </header>
@@ -766,264 +634,95 @@
       <section class="panel hero">
         <div class="hero-head">
           <div>
-            <h2 class="section-title">全体サマリー</h2>
+            <h2 class="section-title">蜈ｨ菴薙し繝槭Μ繝ｼ</h2>
             <p class="section-subtitle">
-              カテゴリごとの在庫状況を、ボタンひとつで切り替えて見られます。<br>
-              低在庫と在庫切れは強く見えるようにしています。
-            </p>
+              繧ｫ繝・ざ繝ｪ縺斐→縺ｮ蝨ｨ蠎ｫ迥ｶ豕√ｒ縲√・繧ｿ繝ｳ縺ｲ縺ｨ縺､縺ｧ蛻・ｊ譖ｿ縺医※隕九ｉ繧後∪縺吶・br>
+              菴主惠蠎ｫ縺ｨ蝨ｨ蠎ｫ蛻・ｌ縺ｯ蠑ｷ縺剰ｦ九∴繧九ｈ縺・↓縺励※縺・∪縺吶・            </p>
           </div>
           <div class="status-row">
-            <span class="pill green" id="connectionPill">ローカルモード</span>
-            <span class="pill gray" id="syncState">保存済み</span>
+            <span class="pill green" id="connectionPill">繝ｭ繝ｼ繧ｫ繝ｫ繝｢繝ｼ繝・/span>
+            <span class="pill gray" id="syncState">菫晏ｭ俶ｸ医∩</span>
+            <span class="pill warn" id="purchaseSoonPill">雋ｷ縺・凾 0莉ｶ</span>
             <span class="pill blue" id="lastUpdatedPill">-</span>
           </div>
         </div>
 
         <div class="kpis" style="margin-bottom:14px;">
           <div class="kpi">
-            <div class="label">総品目数</div>
+            <div class="label">邱丞刀逶ｮ謨ｰ</div>
             <div class="value" id="kpiTotal">0</div>
-            <div class="sub">登録されている全品目</div>
+            <div class="sub">逋ｻ骭ｲ縺輔ｌ縺ｦ縺・ｋ蜈ｨ蜩∫岼</div>
           </div>
           <div class="kpi">
-            <div class="label">低在庫</div>
+            <div class="label">菴主惠蠎ｫ</div>
             <div class="value" id="kpiLow">0</div>
-            <div class="sub">最低在庫を下回る品目</div>
+            <div class="sub">譛菴主惠蠎ｫ繧剃ｸ句屓繧句刀逶ｮ</div>
           </div>
           <div class="kpi">
-            <div class="label">在庫切れ</div>
+            <div class="label">蝨ｨ蠎ｫ蛻・ｌ</div>
             <div class="value" id="kpiZero">0</div>
-            <div class="sub">補充が必要な品目</div>
+            <div class="sub">陬懷・縺悟ｿ・ｦ√↑蜩∫岼</div>
           </div>
           <div class="kpi">
-            <div class="label">カテゴリ数</div>
+            <div class="label">繧ｫ繝・ざ繝ｪ謨ｰ</div>
             <div class="value" id="kpiCategories">0</div>
-            <div class="sub">分類の種類</div>
+            <div class="sub">蛻・｡槭・遞ｮ鬘・/div>
           </div>
         </div>
-
-        <div class="section-head">
-          <div>
-            <h2>カテゴリボタン</h2>
-            <p>押すとそのカテゴリだけに絞り込めます。全体・低在庫・在庫切れもワンタップです。</p>
-          </div>
-        </div>
-        <div class="category-bar" id="categoryBar"></div>
-
-        <div class="section-head" style="margin-top:6px;">
-          <div>
-            <h2>在庫一覧</h2>
-            <p>検索と条件で絞り込んだあと、各品目のボタンで在庫更新できます。</p>
-          </div>
-        </div>
-
-        <div class="filters">
-          <input class="input" id="searchInput" placeholder="品目名・分類で検索" />
-          <select class="select" id="statusFilter">
-            <option value="">全ステータス</option>
-            <option value="low">低在庫のみ</option>
-            <option value="zero">在庫切れのみ</option>
-          </select>
-          <select class="select" id="sortFilter">
-            <option value="status">状態順</option>
-            <option value="name">名前順</option>
-            <option value="stock">在庫少ない順</option>
-          </select>
-        </div>
-
-        <div id="inventoryList"></div>
-      </section>
-
-      <aside class="stack sticky-right">
-        <section class="panel section">
+        <section class="panel section" style="margin-bottom:14px;">
           <div class="section-head">
             <div>
-              <h2>登録・調整</h2>
-              <p>よく使う入力だけを残して、すぐ更新できるようにしています。</p>
+              <h2>谺｡蝗櫁ｳｼ蜈･逶ｮ螳・/h2>
+              <p>豸郁ｲｻ繝ｭ繧ｰ縺九ｉ縲∵怙菴主惠蠎ｫ縺ｫ螻翫￥譎よ悄繧偵＊縺｣縺上ｊ謗ｨ螳壹＠縺ｾ縺吶ゅΟ繧ｰ縺悟｢励∴繧九⊇縺ｩ邊ｾ蠎ｦ縺御ｸ翫′繧翫∪縺吶・/p>
             </div>
           </div>
-
-          <div class="grid-2">
-            <form class="form-card" id="addForm">
-              <h3>新しい品目</h3>
-              <div class="field">
-                <label>分類</label>
-                <input class="input" name="category" placeholder="例: お風呂用品" required />
-              </div>
-              <div class="field">
-                <label>品目名</label>
-                <input class="input" name="name" placeholder="例: シャンプー" required />
-              </div>
-              <div class="field">
-                <label>初期在庫</label>
-                <input class="input" name="stock" type="number" min="0" step="1" value="0" required />
-              </div>
-              <div class="field">
-                <label>最低在庫</label>
-                <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
-              </div>
-              <div class="field">
-                <label>単位</label>
-                <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
-              </div>
-              <button class="btn success" type="submit">追加する</button>
-            </form>
-
-            <form class="form-card" id="adjustForm">
-              <h3>在庫調整</h3>
-              <div class="field">
-                <label>対象品目</label>
-                <input class="input" name="name" placeholder="品目名を入力" required />
-              </div>
-              <div class="field">
-                <label>増減数</label>
-                <input class="input" name="delta" type="number" step="1" value="-1" required />
-              </div>
-              <div class="field">
-                <label>メモ</label>
-                <textarea class="textarea" name="memo" rows="4" placeholder="例: 2個消費、3個入荷"></textarea>
-              </div>
-              <button class="btn primary" type="submit">反映する</button>
-            </form>
-          </div>
+          <div id="forecastList" class="forecast-list"></div>
         </section>
-
         <section class="panel section">
-          <div class="section-head">
+                    <div class="section-head">
             <div>
-              <h2>同期設定</h2>
-              <p>標準は GAS 同期です。ローカルモードは必要なときだけ切り替えます。</p>
+              <h2>Sync Settings</h2>
+              <p>Standard sync uses the built-in GAS Web App URL. Switch to local mode only when needed.</p>
             </div>
-          </div>
-          <div class="mini-chip-row" style="margin-bottom: 12px;">
-            <button class="mini-chip active" type="button" id="btnModeRemote">標準同期</button>
-            <button class="mini-chip" type="button" id="btnModeLocal">ローカルモード</button>
-          </div>
-          <div class="field">
-            <label>同期先 URL</label>
-            <input class="input" id="apiInput" readonly />
-            <div class="field-help">標準同期では自動でこのURLを使います。</div>
           </div>
           <div class="toolbar" style="margin-bottom:12px;">
-            <button class="btn" id="btnLoadRemote" type="button">読み込み</button>
-            <button class="btn danger" id="btnClearApi" type="button">ローカルへ切替</button>
+            <button class="chip" id="btnModeRemote" type="button">Standard Sync</button>
+            <button class="chip" id="btnModeLocal" type="button">Local Mode</button>
+          </div>
+          <div class="field">
+            <label>Sync URL</label>
+            <input class="input" id="apiInput" readonly />
+          </div>
+          <div class="toolbar" style="margin-bottom:12px;">
+            <button class="btn" id="btnLoadRemote" type="button">Load</button>
+            <button class="btn danger" id="btnClearApi" type="button">Switch to Local</button>
           </div>
           <p class="note">
-            標準同期では、他の端末でもURL入力なしでそのまま使えます。ローカルモードは端末ごとの下書き用です。
-          </p>
-        </section>
-
-        <section class="panel section">
-          <div class="section-head">
-            <div>
-              <h2>公開手順</h2>
-              <p>GitHub Pages と GAS をつなぐ最短ルートです。</p>
-            </div>
-          </div>
-          <div class="guide">
-            <div class="guide-step">`index.html` を GitHub リポジトリのルートに置く。</div>
-            <div class="guide-step">GitHub に push して、Repository Settings の Pages を有効化する。</div>
-            <div class="guide-step">Build and deployment は `Deploy from a branch`、Branch は `main`、Folder は `/ (root)` にする。</div>
-            <div class="guide-step">GAS を Web App として公開する。標準同期URLは画面に組み込み済みです。</div>
-            <div class="guide-step">LINE Bot 側は GAS の Webhook を維持しつつ、必要ならこの画面の保存ロジックを同じシートに寄せる。</div>
-          </div>
-        </section>
-
-        <section class="panel section">
-          <div class="section-head">
-            <div>
-              <h2>操作履歴</h2>
-              <p>最近の更新や同期を残します。</p>
-            </div>
-          </div>
-          <div class="history" id="historyList"></div>
-          <p class="note">
-            もし次に進めるなら、GAS 側に `GET` と `POST` の受け口を追加して、この画面から直接在庫を更新できる形まで整えられます。
+            In standard sync, the GAS Web App URL is already built in, so it works on any device without typing.
           </p>
         </section>
       </aside>
     </div>
   </div>
 
-  <button class="fab" id="fabAdd">＋ 新規追加</button>
-
-  <div class="modal-backdrop" id="quickAddBackdrop" aria-hidden="true">
-    <div class="modal" role="dialog" aria-modal="true" aria-labelledby="quickAddTitle">
-      <div class="modal-head">
-        <div>
-          <h3 id="quickAddTitle">クイック追加</h3>
-          <p>品目名を入れて、必要なら分類を選ぶだけで素早く登録できます。</p>
-        </div>
-        <button class="btn" type="button" id="btnCloseQuickAdd">閉じる</button>
-      </div>
-
-      <form id="quickAddForm">
-        <div class="field">
-          <label>分類</label>
-          <input class="input" name="category" placeholder="例: お風呂用品" required />
-          <div class="field-help">ボタンから選ぶか、直接入力してください。</div>
-        </div>
-
-        <div class="mini-chip-row" id="modalCategoryChips" style="margin-bottom: 14px;"></div>
-
-        <div class="modal-grid">
-          <div class="field">
-            <label>品目名</label>
-            <input class="input" name="name" placeholder="例: シャンプー" required />
-          </div>
-          <div class="field">
-            <label>単位</label>
-            <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
-          </div>
-          <div class="field">
-            <label>在庫数</label>
-            <input class="input" name="stock" type="number" min="0" step="1" value="1" required />
-          </div>
-          <div class="field">
-            <label>最低在庫</label>
-            <input class="input" name="minStock" type="number" min="0" step="1" value="1" required />
-          </div>
-        </div>
-
-        <div class="modal-actions">
-          <button class="btn" type="button" id="btnQuickAddFillLast">前回の分類</button>
-          <button class="btn danger" type="button" id="btnQuickAddClear">クリア</button>
-          <button class="btn primary" type="submit">追加する</button>
-        </div>
-      </form>
-    </div>
-  </div>
-
-  <div class="toast" id="toast" role="status" aria-live="polite"></div>
-
   <script>
     const STORAGE_KEY = "inventory_console_state_v2";
-    const API_KEY = "inventory_console_api_url_v2";
-    const LOCAL_MODE_KEY = "inventory_console_local_mode_v1";
+    const SYNC_MODE_KEY = "inventory_console_sync_mode_v1";
+    const CUSTOM_API_URL_KEY = "inventory_console_custom_api_url_v1";
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx6IKSwS9-65CoZzNHUfhOgvCRB8F7YQPsikDtGJ_cw42Fay8hX2dOHTbaMR1-8riZ7/exec";
-    const AUTO_REFRESH_INTERVAL_MS = 60 * 1000;
-    // Enter your LIFF app ID here to turn on LINE login for the web app.
-    const LIFF_ID = "2010110468-3HNQTQLt";
-    const LINE_AUTH_ENABLED = Boolean(LIFF_ID);
 
     const sampleInventory = [
-      { category: "お風呂用品", name: "LUX コンディショナー", stock: 1, minStock: 1, unit: "回分" },
-      { category: "お風呂用品", name: "LUX シャンプー", stock: 1, minStock: 1, unit: "回分" },
-      { category: "お風呂用品", name: "お風呂掃除スポンジ", stock: 1, minStock: 1, unit: "個" },
-      { category: "お風呂用品", name: "かずきシャンプー", stock: 3, minStock: 1, unit: "本" },
-      { category: "お風呂用品", name: "みくシャンプー", stock: 0, minStock: 1, unit: "本" },
-      { category: "キッチン", name: "ラップ", stock: 2, minStock: 1, unit: "本" },
-      { category: "キッチン", name: "クッキングペーパー", stock: 0, minStock: 1, unit: "箱" },
-      { category: "消耗品", name: "ティッシュ", stock: 0, minStock: 2, unit: "箱" }
+      { category: "縺企｢ｨ蜻ら畑蜩・, name: "LUX 繧ｳ繝ｳ繝・ぅ繧ｷ繝ｧ繝翫・", stock: 1, minStock: 1, unit: "蝗槫・" },
+      { category: "縺企｢ｨ蜻ら畑蜩・, name: "LUX 繧ｷ繝｣繝ｳ繝励・", stock: 1, minStock: 1, unit: "蝗槫・" },
+      { category: "縺企｢ｨ蜻ら畑蜩・, name: "縺企｢ｨ蜻よ祉髯､繧ｹ繝昴Φ繧ｸ", stock: 1, minStock: 1, unit: "蛟・ },
+      { category: "縺企｢ｨ蜻ら畑蜩・, name: "縺九★縺阪す繝｣繝ｳ繝励・", stock: 3, minStock: 1, unit: "譛ｬ" },
+      { category: "縺企｢ｨ蜻ら畑蜩・, name: "縺ｿ縺上す繝｣繝ｳ繝励・", stock: 0, minStock: 1, unit: "譛ｬ" },
+      { category: "繧ｭ繝・メ繝ｳ", name: "繝ｩ繝・・", stock: 2, minStock: 1, unit: "譛ｬ" },
+      { category: "繧ｭ繝・メ繝ｳ", name: "繧ｯ繝・く繝ｳ繧ｰ繝壹・繝代・", stock: 0, minStock: 1, unit: "邂ｱ" },
+      { category: "豸郁怜刀", name: "繝・ぅ繝・す繝･", stock: 0, minStock: 2, unit: "邂ｱ" }
     ];
 
     const state = loadState();
-    let syncTimer = null;
-    let syncInFlight = false;
-    let syncPending = false;
-    let lineIdToken = "";
-    let lineProfileName = "";
-    let toastTimer = null;
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1038,164 +737,89 @@
       kpiCategories: document.getElementById("kpiCategories"),
       connectionPill: document.getElementById("connectionPill"),
       syncState: document.getElementById("syncState"),
+      forecastList: document.getElementById("forecastList"),
+      purchaseSoonPill: document.getElementById("purchaseSoonPill"),
       lastUpdatedPill: document.getElementById("lastUpdatedPill")
-      ,
-      quickAddBackdrop: document.getElementById("quickAddBackdrop"),
-      quickAddForm: document.getElementById("quickAddForm"),
-      modalCategoryChips: document.getElementById("modalCategoryChips"),
-      authTitle: document.getElementById("authTitle"),
-      authMessage: document.getElementById("authMessage"),
-      btnLineLogin: document.getElementById("btnLineLogin"),
-      toast: document.getElementById("toast")
     };
-
-    startApp();
-
-    async function startApp() {
-      if (LINE_AUTH_ENABLED) {
-        document.body.classList.add("auth-pending");
-        var authed = await initializeLineAuth();
-        if (!authed) return;
-
-        // When LINE login is enabled, prefer the shared remote source by default.
-        if (state.localMode || !state.apiUrl) {
-          state.localMode = false;
-          state.apiUrl = localStorage.getItem(API_KEY) || DEFAULT_API_URL;
-          saveState();
-        }
-      }
-
-      document.body.classList.remove("auth-pending", "auth-denied");
-      els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
-      render();
-      bindEvents();
-      if (state.apiUrl && shouldAutoRefresh()) {
-        setTimeout(() => loadRemote({ silent: false, auto: true }), 350);
-      }
-      renderModalCategoryChips();
+    els.apiInput.value = state.syncMode === "remote" ? getEffectiveApiUrl() : "LOCAL MODE";
+    render();
+    bindEvents();
+    if (state.syncMode === "remote") {
+      setTimeout(() => loadRemote(), 0);
     }
 
-    async function initializeLineAuth() {
-      try {
-        if (!window.liff) {
-          showAuthError("LINEログインを読み込めませんでした。通信環境を確認してください。");
-          return false;
-        }
-
-        await liff.init({ liffId: LIFF_ID });
-        if (!liff.isLoggedIn()) {
-          els.authTitle.textContent = "LINEログインが必要です";
-          els.authMessage.textContent = "許可された2人だけが在庫管理を開けます。";
-          els.btnLineLogin.style.display = "inline-flex";
-          els.btnLineLogin.onclick = function() {
-            liff.login({ redirectUri: location.href });
-          };
-          return false;
-        }
-
-        lineIdToken = liff.getIDToken() || "";
-        if (!lineIdToken) {
-          showAuthError("LINE認証トークンを取得できませんでした。もう一度ログインしてください。");
-          return false;
-        }
-        try {
-          const profile = await liff.getProfile();
-          lineProfileName = profile.displayName || "";
-        } catch (err) {
-          lineProfileName = "";
-        }
-        return true;
-      } catch (err) {
-        showAuthError("LINEログインの初期化に失敗しました。LIFF設定を確認してください。");
-        return false;
-      }
-    }
-
-    function showAuthError(message) {
-      document.body.classList.remove("auth-pending");
-      document.body.classList.add("auth-denied");
-      els.authTitle.textContent = "アクセスできません";
-      els.authMessage.textContent = message;
-      els.btnLineLogin.style.display = "none";
-    }
-
-    function loadState() {
+        function loadState() {
       try {
         const raw = localStorage.getItem(STORAGE_KEY);
-        const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
         if (!raw) {
+          const syncMode = localStorage.getItem(SYNC_MODE_KEY) || "remote";
           return {
             items: structuredClone(sampleInventory),
-            history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
-            categories: [],
-            apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
+            history: [{ title: "蛻晄悄繝・・繧ｿ繧定ｪｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆", detail: "讓呎ｺ門酔譛溘〒襍ｷ蜍・, time: new Date().toISOString() }],
+            syncMode,
+            customApiUrl: localStorage.getItem(CUSTOM_API_URL_KEY) || "",
             lastUpdated: new Date().toISOString(),
-            selectedCategory: "all",
-            loadedFromRemote: false,
-            lastAddedCategory: "",
-            lastRemoteLoadedAt: "",
-            localMode
+            summary: null,
+            forecasts: [],
+            selectedCategory: "all"
           };
         }
         const parsed = JSON.parse(raw);
+        const syncMode = parsed.syncMode || localStorage.getItem(SYNC_MODE_KEY) || "remote";
+        const customApiUrl = parsed.customApiUrl || localStorage.getItem(CUSTOM_API_URL_KEY) || "";
+        const legacyApiUrl = parsed.apiUrl || "";
         return {
           items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
           history: Array.isArray(parsed.history) ? parsed.history : [],
-          categories: Array.isArray(parsed.categories) ? parsed.categories : [],
-          apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
+          syncMode,
+          customApiUrl: syncMode === "remote" ? (customApiUrl || (legacyApiUrl && legacyApiUrl !== DEFAULT_API_URL ? legacyApiUrl : "")) : customApiUrl,
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
-          selectedCategory: parsed.selectedCategory || "all",
-          loadedFromRemote: Boolean(parsed.loadedFromRemote),
-          lastAddedCategory: parsed.lastAddedCategory || "",
-          lastRemoteLoadedAt: parsed.lastRemoteLoadedAt || "",
-          localMode
+          summary: parsed.summary || null,
+          forecasts: Array.isArray(parsed.forecasts) ? parsed.forecasts : [],
+          selectedCategory: parsed.selectedCategory || "all"
         };
       } catch {
-        const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
+        const syncMode = localStorage.getItem(SYNC_MODE_KEY) || "remote";
         return {
           items: structuredClone(sampleInventory),
           history: [],
-          categories: [],
-          apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
+          syncMode,
+          customApiUrl: localStorage.getItem(CUSTOM_API_URL_KEY) || "",
           lastUpdated: new Date().toISOString(),
-          selectedCategory: "all",
-          loadedFromRemote: false,
-          lastAddedCategory: "",
-          lastRemoteLoadedAt: "",
-          localMode
+          summary: null,
+          forecasts: [],
+          selectedCategory: "all"
         };
       }
     }
 
     function saveState() {
       state.lastUpdated = new Date().toISOString();
-      localStorage.setItem(LOCAL_MODE_KEY, state.localMode ? "true" : "false");
-      if (!state.localMode) {
-        localStorage.setItem(API_KEY, state.apiUrl || DEFAULT_API_URL);
+      localStorage.setItem(SYNC_MODE_KEY, state.syncMode || "remote");
+      if (state.customApiUrl) {
+        localStorage.setItem(CUSTOM_API_URL_KEY, state.customApiUrl);
+      } else {
+        localStorage.removeItem(CUSTOM_API_URL_KEY);
       }
       localStorage.setItem(STORAGE_KEY, JSON.stringify(state));
       renderMeta();
     }
 
-    function shouldAutoRefresh() {
-      if (!state.apiUrl || state.localMode) return false;
-      if (!state.loadedFromRemote || !state.lastRemoteLoadedAt) return true;
-      return Date.now() - new Date(state.lastRemoteLoadedAt).getTime() > AUTO_REFRESH_INTERVAL_MS;
+    function getEffectiveApiUrl() {
+      if (state.syncMode === "remote") {
+        return state.customApiUrl || DEFAULT_API_URL;
+      }
+      return "";
     }
 
-    function queueRemoteSync(reason) {
-      if (!state.apiUrl || !state.loadedFromRemote) return;
-      syncPending = true;
-      if (syncTimer) clearTimeout(syncTimer);
-      syncTimer = setTimeout(() => {
-        syncTimer = null;
-        syncToRemote(reason || "自動同期");
-      }, 1200);
+    function isRemoteSyncEnabled() {
+      return state.syncMode === "remote" && Boolean(getEffectiveApiUrl());
     }
 
     function log(title, detail) {
       state.history.unshift({ title, detail, time: new Date().toISOString() });
       state.history = state.history.slice(0, 10);
+      refreshForecastState();
       saveState();
       renderHistory();
     }
@@ -1211,9 +835,9 @@
     }
 
     function statusLabel(status) {
-      if (status === "zero") return '<span class="pill bad">在庫切れ</span>';
-      if (status === "low") return '<span class="pill warn">低在庫</span>';
-      return '<span class="pill green">正常</span>';
+      if (status === "zero") return '<span class="pill bad">蝨ｨ蠎ｫ蛻・ｌ</span>';
+      if (status === "low") return '<span class="pill warn">菴主惠蠎ｫ</span>';
+      return '<span class="pill green">豁｣蟶ｸ</span>';
     }
 
     function escapeHtml(str) {
@@ -1225,45 +849,85 @@
         .replaceAll("'", "&#39;");
     }
 
+    function getForecastForItem(item) {
+      const forecasts = Array.isArray(state.forecasts) ? state.forecasts : [];
+      const key = normalize(item && item.name);
+      return forecasts.find((forecast) => normalize(forecast.name) === key) || null;
+    }
+
+    function formatForecastDate(iso) {
+      if (!iso) return "未定";
+      const date = new Date(iso);
+      if (Number.isNaN(date.getTime())) return "未定";
+      return date.toLocaleDateString("ja-JP", { month: "numeric", day: "numeric" });
+    }
+
+    function formatForecastLabel(forecast) {
+      if (!forecast) return "データ不足";
+      const days = Number(forecast.daysToMin);
+      if (!Number.isFinite(days)) return "データ不足";
+      if (days <= 0) return "今日〜明日";
+      if (days === 1) return "あと1日";
+      return "あと " + days + "日";
+    }
+
+    function renderForecastPanel() {
+      const forecasts = Array.isArray(state.forecasts) ? state.forecasts.slice(0, 5) : [];
+      if (!forecasts.length) {
+        els.forecastList.innerHTML = '<div class="forecast-empty">消費ログがまだ少ないため、購入目安はこれから学習します。消費データが増えるほど、次に買う時期を見やすくできます。</div>';
+        return;
+      }
+
+      els.forecastList.innerHTML = forecasts.map((forecast) => {
+        const days = Number(forecast.daysToMin);
+        const tone = days <= 3 ? "hot" : (days <= 7 ? "warn" : "ok");
+        const label = formatForecastLabel(forecast);
+        const dateLabel = formatForecastDate(forecast.nextPurchaseDate);
+        const pace = Number(forecast.daysPerUnit);
+        const paceText = Number.isFinite(pace) ? pace.toFixed(1) + "日/個" : "データ不足";
+        return `
+          <div class="forecast-item ${tone}">
+            <strong>${escapeHtml(forecast.name)}</strong>
+            <span>${escapeHtml(forecast.category || "未分類")} ・ ${escapeHtml(label)} ・ ${escapeHtml(dateLabel)}ごろ ・ 消費ペース ${escapeHtml(paceText)} ・ サンプル ${Number(forecast.sampleCount || 0)}件</span>
+          </div>
+        `;
+      }).join("");
+    }
+
+    function refreshForecastState() {
+      const forecasts = Array.isArray(state.forecasts) ? state.forecasts : [];
+      if (!forecasts.length) return;
+      const byName = new Map(forecasts.map((forecast) => [normalize(forecast.name), forecast]));
+      state.forecasts = state.items.map((item) => {
+        const base = byName.get(normalize(item.name));
+        if (!base) return null;
+        const stock = Number(item.stock) || 0;
+        const minStock = Number(item.minStock) || 0;
+        const dailyRate = Number(base.dailyRate);
+        const available = Math.max(0, stock - minStock);
+        const daysToMin = dailyRate > 0 ? (available <= 0 ? 0 : Math.ceil(available / dailyRate)) : base.daysToMin;
+        const nextPurchaseDate = dailyRate > 0
+          ? new Date(Date.now() + daysToMin * 24 * 60 * 60 * 1000).toISOString()
+          : base.nextPurchaseDate;
+        return Object.assign({}, base, {
+          stock,
+          minStock,
+          daysToMin,
+          nextPurchaseDate
+        });
+      }).filter(Boolean).sort((a, b) => a.daysToMin - b.daysToMin);
+      if (state.summary) {
+        state.summary.forecastSoon = state.forecasts.filter((forecast) => Number(forecast.daysToMin) <= 7).length;
+      }
+    }
+
     function selectedCategory() {
       return state.selectedCategory || "all";
     }
 
-    function allCategories() {
-      const remoteCategories = Array.isArray(state.categories) ? state.categories.filter(Boolean) : [];
-      const itemCategories = state.items.map((item) => item.category).filter(Boolean);
-      return [...new Set([...remoteCategories, ...itemCategories])].sort((a, b) => a.localeCompare(b, "ja"));
-    }
-
-    function openQuickAdd(category = "") {
-      const form = els.quickAddForm;
-      form.category.value = category || state.lastAddedCategory || (selectedCategory() === "all" ? "" : selectedCategory());
-      if (!form.category.value) {
-        const firstCategory = allCategories()[0] || "";
-        form.category.value = firstCategory;
-      }
-      if (!form.stock.value) form.stock.value = 1;
-      if (!form.minStock.value) form.minStock.value = 1;
-      if (!form.unit.value) form.unit.value = "個";
-      els.quickAddBackdrop.classList.add("open");
-      els.quickAddBackdrop.setAttribute("aria-hidden", "false");
-      setTimeout(() => form.name.focus(), 50);
-    }
-
-    function closeQuickAdd() {
-      els.quickAddBackdrop.classList.remove("open");
-      els.quickAddBackdrop.setAttribute("aria-hidden", "true");
-    }
-
-    function renderModalCategoryChips() {
-      const categories = allCategories();
-      els.modalCategoryChips.innerHTML = categories.map((category) => (
-        `<button class="mini-chip" type="button" data-category="${escapeHtml(category)}">${escapeHtml(category)}</button>`
-      )).join("") || '<span class="field-help">カテゴリがまだありません</span>';
-    }
-
     function setSelectedCategory(category) {
       state.selectedCategory = category;
+      refreshForecastState();
       saveState();
       render();
     }
@@ -1296,56 +960,37 @@
 
     function render() {
       renderMeta();
-      renderModalCategoryChips();
       renderCategoryBar();
       renderInventory();
       renderHistory();
+      renderForecastPanel();
     }
 
-    function renderMeta() {
+        function renderMeta() {
       const total = state.items.length;
       const low = state.items.filter((item) => getStatus(item) === "low").length;
       const zero = state.items.filter((item) => getStatus(item) === "zero").length;
-      const categories = allCategories().length;
+      const categories = new Set(state.items.map((item) => item.category)).size;
+      const forecastSoon = Array.isArray(state.forecasts)
+        ? state.forecasts.filter((forecast) => Number(forecast.daysToMin) <= 7).length
+        : Number(state.summary && state.summary.forecastSoon) || 0;
       els.kpiTotal.textContent = total;
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
-      const userLabel = lineProfileName ? ` / ${lineProfileName}` : "";
-      els.connectionPill.textContent = state.loadedFromRemote ? `GAS読込済み${userLabel}` : (state.apiUrl ? `API設定あり${userLabel}` : "ローカルモード");
-      els.syncState.textContent = getSyncLabel();
+      els.connectionPill.textContent = state.syncMode === "remote" ? "讓呎ｺ門酔譛・ : "繝ｭ繝ｼ繧ｫ繝ｫ繝｢繝ｼ繝・;
+      els.syncState.textContent = state.syncMode === "remote" ? "蜷梧悄貅門ｙOK" : "菫晏ｭ倥・縺ｿ";
+      els.purchaseSoonPill.textContent = `雋ｷ縺・凾 ${forecastSoon}莉ｶ`;
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
-      document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
-      document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
     }
-
-    function getSyncLabel() {
-      if (!state.apiUrl) return "保存済み";
-      if (syncInFlight) return "同期中...";
-      if (state.lastRemoteLoadedAt) {
-        return `最終同期 ${new Date(state.lastRemoteLoadedAt).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}`;
-      }
-      return "同期準備OK";
-    }
-
-    function showToast(message, tone = "good") {
-      if (!els.toast) return;
-      els.toast.textContent = message;
-      els.toast.className = `toast ${tone} show`;
-      if (toastTimer) clearTimeout(toastTimer);
-      toastTimer = setTimeout(() => {
-        els.toast.className = `toast ${tone}`;
-      }, 3200);
-    }
-
     function renderCategoryBar() {
-      const categories = allCategories();
+      const categories = [...new Set(state.items.map((item) => item.category))].sort((a, b) => a.localeCompare(b, "ja"));
       const current = selectedCategory();
       const statusCurrent = els.status.value;
       const chips = [
-        { key: "all", label: "すべて" },
-        { key: "low", label: "低在庫" },
-        { key: "zero", label: "在庫切れ" }
+        { key: "all", label: "縺吶∋縺ｦ" },
+        { key: "low", label: "菴主惠蠎ｫ" },
+        { key: "zero", label: "蝨ｨ蠎ｫ蛻・ｌ" }
       ];
 
       chips.push(...categories.map((category) => ({
@@ -1368,9 +1013,8 @@
       if (!visible.length) {
         els.list.innerHTML = `
           <div class="empty">
-            条件に一致する品目はありません。<br>
-            検索やカテゴリを変えるか、新しい品目を追加してください。
-          </div>
+            譚｡莉ｶ縺ｫ荳閾ｴ縺吶ｋ蜩∫岼縺ｯ縺ゅｊ縺ｾ縺帙ｓ縲・br>
+            讀懃ｴ｢繧・き繝・ざ繝ｪ繧貞､峨∴繧九°縲∵眠縺励＞蜩∫岼繧定ｿｽ蜉縺励※縺上□縺輔＞縲・          </div>
         `;
         return;
       }
@@ -1389,11 +1033,11 @@
             <div class="category-group-head">
               <div>
                 <h3>${escapeHtml(category)}</h3>
-                <p>${items.length}品目 ・ 正常 ${normal} / 低在庫 ${low} / 在庫切れ ${zero}</p>
+                <p>${items.length}蜩∫岼 繝ｻ 豁｣蟶ｸ ${normal} / 菴主惠蠎ｫ ${low} / 蝨ｨ蠎ｫ蛻・ｌ ${zero}</p>
               </div>
               <div class="toolbar">
-                <button class="mini green" data-action="focus-category" data-category="${escapeHtml(category)}">このカテゴリ</button>
-                <button class="mini gray" data-action="quick-add" data-category="${escapeHtml(category)}">このカテゴリに追加</button>
+                <button class="mini green" data-action="focus-category" data-category="${escapeHtml(category)}">縺薙・繧ｫ繝・ざ繝ｪ</button>
+                <button class="mini gray" data-action="quick-add" data-category="${escapeHtml(category)}">縺薙・繧ｫ繝・ざ繝ｪ縺ｫ霑ｽ蜉</button>
               </div>
             </div>
             <div class="category-group-body">
@@ -1409,13 +1053,15 @@
           const action = button.dataset.action;
           const name = button.dataset.name;
           const category = button.dataset.category;
-          if (action === "inc") adjustStock(name, 1, "在庫を1増やしました");
-          if (action === "dec") adjustStock(name, -1, "在庫を1減らしました");
+          if (action === "inc") adjustStock(name, 1, "蝨ｨ蠎ｫ繧・蠅励ｄ縺励∪縺励◆");
+          if (action === "dec") adjustStock(name, -1, "蝨ｨ蠎ｫ繧・貂帙ｉ縺励∪縺励◆");
           if (action === "edit") editItem(name);
           if (action === "delete") deleteItem(name);
           if (action === "focus-category") setSelectedCategory(category);
           if (action === "quick-add") {
-            openQuickAdd(category);
+            const addForm = document.getElementById("addForm");
+            addForm.querySelector('[name="category"]').value = category;
+            addForm.scrollIntoView({ behavior: "smooth", block: "center" });
           }
         });
       });
@@ -1423,6 +1069,13 @@
 
     function renderItemCard(item) {
       const status = getStatus(item);
+      const forecast = getForecastForItem(item);
+      const forecastText = forecast
+        ? "次回購入目安 " + formatForecastLabel(forecast) + " / " + formatForecastDate(forecast.nextPurchaseDate) + "ごろ"
+        : "次回購入目安はデータがたまると表示されます";
+      const paceText = forecast && Number.isFinite(Number(forecast.daysPerUnit))
+        ? "消費ペース " + Number(forecast.daysPerUnit).toFixed(1) + "日/個"
+        : "消費ログを集計中";
       return `
         <div class="item-card">
           <div class="item-main">
@@ -1432,6 +1085,7 @@
               <span>在庫 ${item.stock}${escapeHtml(item.unit)}</span>
               <span>最低 ${item.minStock}${escapeHtml(item.unit)}</span>
             </div>
+            <div class="item-insight"><strong>${escapeHtml(forecastText)}</strong> ・ ${escapeHtml(paceText)}</div>
           </div>
           <div>${statusLabel(status)}</div>
           <div class="item-actions">
@@ -1446,31 +1100,18 @@
 
     function renderHistory() {
       if (!state.history.length) {
-        els.history.innerHTML = `<div class="history-item"><div><strong>まだ履歴がありません</strong><span>追加・調整・同期のたびに残ります</span></div></div>`;
+        els.history.innerHTML = `<div class="history-item"><div><strong>縺ｾ縺螻･豁ｴ縺後≠繧翫∪縺帙ｓ</strong><span>霑ｽ蜉繝ｻ隱ｿ謨ｴ繝ｻ蜷梧悄縺ｮ縺溘・縺ｫ谿九ｊ縺ｾ縺・/span></div></div>`;
         return;
       }
-      els.history.innerHTML = state.history.map((item) => {
-        if (Object.prototype.hasOwnProperty.call(item, "item") || Object.prototype.hasOwnProperty.call(item, "date") || Object.prototype.hasOwnProperty.call(item, "quantity")) {
-          return `
-            <div class="history-item">
-              <div>
-                <strong>${escapeHtml(item.item || "")}</strong>
-                <span>${escapeHtml(item.date || "")} ・ ${escapeHtml(item.quantity ?? "")}</span>
-              </div>
-              <span>ConsumptionLog</span>
-            </div>
-          `;
-        }
-        return `
-          <div class="history-item">
-            <div>
-              <strong>${escapeHtml(item.title || "")}</strong>
-              <span>${escapeHtml(item.detail || "")}</span>
-            </div>
-            <span>${item.time ? new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" }) : ""}</span>
+      els.history.innerHTML = state.history.map((item) => `
+        <div class="history-item">
+          <div>
+            <strong>${escapeHtml(item.title)}</strong>
+            <span>${escapeHtml(item.detail)}</span>
           </div>
-        `;
-      }).join("");
+          <span>${new Date(item.time).toLocaleTimeString("ja-JP", { hour: "2-digit", minute: "2-digit" })}</span>
+        </div>
+      `).join("");
     }
 
     function addItem(data) {
@@ -1480,81 +1121,74 @@
         existing.stock = Number(data.stock);
         existing.minStock = Number(data.minStock);
         existing.unit = data.unit;
-        log("既存品目を更新", `${existing.name} を更新しました`);
+        log("譌｢蟄伜刀逶ｮ繧呈峩譁ｰ", `${existing.name} 繧呈峩譁ｰ縺励∪縺励◆`);
       } else {
-      state.items.unshift({
+        state.items.unshift({
           category: data.category,
           name: data.name,
           stock: Number(data.stock),
           minStock: Number(data.minStock),
           unit: data.unit
         });
-        state.lastAddedCategory = data.category;
-        log("新規追加", `${data.name} を追加しました`);
+        log("譁ｰ隕剰ｿｽ蜉", `${data.name} 繧定ｿｽ蜉縺励∪縺励◆`);
       }
+      refreshForecastState();
       saveState();
       render();
-      queueRemoteSync("追加");
     }
 
     function adjustStock(name, delta, label) {
       const item = state.items.find((row) => normalize(row.name) === normalize(name));
       if (!item) {
-        alert("対象品目が見つかりませんでした。");
+        alert("蟇ｾ雎｡蜩∫岼縺瑚ｦ九▽縺九ｊ縺ｾ縺帙ｓ縺ｧ縺励◆縲・);
         return;
       }
       item.stock = Math.max(0, Number(item.stock) + Number(delta));
-      log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
+      log("蝨ｨ蠎ｫ隱ｿ謨ｴ", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
+      refreshForecastState();
       saveState();
       render();
-      queueRemoteSync("在庫調整");
     }
 
     function editItem(name) {
       const item = state.items.find((row) => normalize(row.name) === normalize(name));
       if (!item) return;
-      const category = prompt("分類", item.category);
+      const category = prompt("蛻・｡・, item.category);
       if (category === null) return;
-      const newName = prompt("品目名", item.name);
+      const newName = prompt("蜩∫岼蜷・, item.name);
       if (newName === null) return;
-      const stock = prompt("在庫数", String(item.stock));
+      const stock = prompt("蝨ｨ蠎ｫ謨ｰ", String(item.stock));
       if (stock === null) return;
-      const minStock = prompt("最低在庫", String(item.minStock));
+      const minStock = prompt("譛菴主惠蠎ｫ", String(item.minStock));
       if (minStock === null) return;
-      const unit = prompt("単位", item.unit);
+      const unit = prompt("蜊倅ｽ・, item.unit);
       if (unit === null) return;
       item.category = category.trim() || item.category;
       item.name = newName.trim() || item.name;
       item.stock = Math.max(0, parseInt(stock, 10) || 0);
       item.minStock = Math.max(0, parseInt(minStock, 10) || 0);
       item.unit = unit.trim() || item.unit;
-      log("品目編集", `${item.name} を更新しました`);
+      log("蜩∫岼邱ｨ髮・, `${item.name} 繧呈峩譁ｰ縺励∪縺励◆`);
       saveState();
       render();
-      queueRemoteSync("編集");
     }
 
     function deleteItem(name) {
-      if (!confirm(`「${name}」を削除しますか？`)) return;
+      if (!confirm(`縲・{name}縲阪ｒ蜑企勁縺励∪縺吶°・歔)) return;
       state.items = state.items.filter((row) => normalize(row.name) !== normalize(name));
-      log("品目削除", `${name} を削除しました`);
+      log("蜩∫岼蜑企勁", `${name} 繧貞炎髯､縺励∪縺励◆`);
       saveState();
       render();
-      queueRemoteSync("削除");
     }
 
-    async function syncToRemote(reason = "手動同期") {
-      if (!state.apiUrl) {
-        alert("先に API URL を設定してください。");
+    async function syncToRemote() {
+      if (!isRemoteSyncEnabled()) {
+        alert("讓呎ｺ門酔譛溘ｒ譛牙柑縺ｫ縺吶ｋ縺ｨGAS縺ｸ菫晏ｭ倥〒縺阪∪縺吶・);
         return;
       }
-      if (syncInFlight) {
-        syncPending = true;
-        return;
-      }
+      const apiUrl = getEffectiveApiUrl();
       try {
-        syncInFlight = true;
-        els.syncState.textContent = "同期中...";
+        els.syncState.textContent = "蜷梧悄荳ｭ...";
         const iframeId = "inventory-sync-frame";
         let iframe = document.getElementById(iframeId);
         if (!iframe) {
@@ -1567,7 +1201,7 @@
 
         const form = document.createElement("form");
         form.method = "POST";
-        form.action = state.apiUrl;
+        form.action = apiUrl;
         form.target = iframeId;
         form.style.display = "none";
 
@@ -1576,16 +1210,13 @@
         actionInput.value = "saveInventory";
         form.appendChild(actionInput);
 
-        const idTokenInput = document.createElement("textarea");
-        idTokenInput.name = "idToken";
-        idTokenInput.value = lineIdToken;
-        form.appendChild(idTokenInput);
-
         const payloadInput = document.createElement("textarea");
         payloadInput.name = "payload";
         payloadInput.value = JSON.stringify({
           items: state.items,
-          history: state.history
+          history: state.history,
+          syncMode: state.syncMode,
+          customApiUrl: state.customApiUrl
         });
         form.appendChild(payloadInput);
 
@@ -1594,107 +1225,62 @@
         setTimeout(() => {
           if (document.body.contains(form)) document.body.removeChild(form);
         }, 500);
-        syncPending = false;
-        state.lastRemoteLoadedAt = new Date().toISOString();
-        log("同期完了", `GAS へ在庫データ送信を実行しました (${reason})`);
-        showToast("GASへ同期しました", "good");
+        log("蜷梧悄", "GAS縺ｸ蝨ｨ蠎ｫ繝・・繧ｿ繧帝∽ｿ｡縺励∪縺励◆");
       } catch {
-        showToast("同期に失敗しました。GAS設定を確認してください。", "bad");
+        alert("蜷梧悄縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲・AS縺ｮURL縺ｨ蜈ｬ髢玖ｨｭ螳壹ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞縲・);
       } finally {
-        syncInFlight = false;
         renderMeta();
-        if (syncPending) {
-          syncPending = false;
-          queueRemoteSync("連続更新");
-        }
       }
     }
 
-    async function loadRemote(options = {}) {
-      const silent = Boolean(options.silent);
-      const auto = Boolean(options.auto);
-      if (!state.apiUrl) {
-        if (!silent) alert("API URL を設定してください。");
+    async function loadRemote() {
+      if (!isRemoteSyncEnabled()) {
+        alert("讓呎ｺ門酔譛溘ｒ譛牙柑縺ｫ縺吶ｋ縺ｨGAS縺九ｉ隱ｭ縺ｿ霎ｼ繧√∪縺吶・);
         return;
       }
+      const apiUrl = getEffectiveApiUrl();
       try {
-        if (!silent) {
-          els.syncState.textContent = "読み込み中...";
-        }
-        const data = await loadRemoteJsonp("data");
-        if (data && data.status === "error") {
-          throw new Error(data.message || "remote auth error");
-        }
-        if (Array.isArray(data.items)) {
-          state.items = data.items;
-          if (Array.isArray(data.history)) state.history = data.history;
-          if (Array.isArray(data.categories)) state.categories = data.categories;
-          state.loadedFromRemote = true;
-          state.lastRemoteLoadedAt = new Date().toISOString();
-          if (!silent) {
-            log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
-            showToast(`GASから${data.items.length}件を読み込みました`, "good");
-          } else if (auto) {
-            showToast("最新データに更新しました", "good");
-          }
-          saveState();
-          render();
-        } else {
-          throw new Error("invalid payload");
-        }
-      } catch (err) {
-        console.error("loadRemote failed", err);
-        if (!silent) {
-          showToast("読み込みに失敗しました。GAS設定を確認してください。", "bad");
-        } else if (auto) {
-          els.syncState.textContent = "自動同期失敗";
-          showToast("自動同期に失敗しました", "warn");
-        }
-      } finally {
-        renderMeta();
-      }
-    }
-
-    function loadRemoteJsonp(action) {
-      return new Promise((resolve, reject) => {
-        const callbackName = `inventoryRemote_${action}_${Date.now()}`;
-        let finished = false;
-        const cleanup = () => {
-          delete window[callbackName];
-          const script = document.getElementById(callbackName);
-          if (script) script.remove();
-        };
-
-        const timer = setTimeout(() => {
-          if (finished) return;
-          finished = true;
-          cleanup();
-          reject(new Error(`${action} timeout`));
-        }, 8000);
-
+        els.syncState.textContent = "隱ｭ縺ｿ霎ｼ縺ｿ荳ｭ...";
+        const callbackName = `inventoryRemote_${Date.now()}`;
         window[callbackName] = (data) => {
-          if (finished) return;
-          finished = true;
-          clearTimeout(timer);
-          cleanup();
-          resolve(data);
+          try {
+            if (Array.isArray(data.items)) {
+              state.items = data.items;
+              if (Array.isArray(data.history)) state.history = data.history;
+              state.summary = data.summary || null;
+              state.forecasts = Array.isArray(data.forecasts) ? data.forecasts : [];
+              refreshForecastState();
+              log("隱ｭ縺ｿ霎ｼ縺ｿ", "GAS縺九ｉ蝨ｨ蠎ｫ繝・・繧ｿ繧定ｪｭ縺ｿ霎ｼ縺ｿ縺ｾ縺励◆");
+              saveState();
+              render();
+            } else {
+              throw new Error("invalid payload");
+            }
+          } finally {
+            delete window[callbackName];
+            const script = document.getElementById(callbackName);
+            if (script) script.remove();
+            renderMeta();
+          }
         };
 
         const script = document.createElement("script");
         script.id = callbackName;
-        const joiner = state.apiUrl.includes("?") ? "&" : "?";
-        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}&idToken=${encodeURIComponent(lineIdToken)}`;
+        const joiner = apiUrl.includes("?") ? "&" : "?";
+        script.src = `${apiUrl}${joiner}action=data&callback=${callbackName}`;
         script.onerror = () => {
-          if (finished) return;
-          finished = true;
-          clearTimeout(timer);
-          cleanup();
-          reject(new Error(`${action} network error`));
+          delete window[callbackName];
+          if (script) script.remove();
+          alert("隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲・AS縺ｮ蜈ｬ髢玖ｨｭ螳壹ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞縲・);
+          renderMeta();
         };
         document.head.appendChild(script);
-      });
+      } catch {
+        alert("隱ｭ縺ｿ霎ｼ縺ｿ縺ｫ螟ｱ謨励＠縺ｾ縺励◆縲・AS縺ｮ蜈ｬ髢玖ｨｭ螳壹ｒ遒ｺ隱阪＠縺ｦ縺上□縺輔＞縲・);
+      } finally {
+        renderMeta();
+      }
     }
-
     function exportJson() {
       const blob = new Blob([JSON.stringify(state, null, 2)], { type: "application/json" });
       const url = URL.createObjectURL(blob);
@@ -1703,96 +1289,51 @@
       a.download = "inventory-console-export.json";
       a.click();
       URL.revokeObjectURL(url);
-      log("JSON出力", "現在の在庫データをエクスポートしました");
+      log("JSON蜃ｺ蜉・, "迴ｾ蝨ｨ縺ｮ蝨ｨ蠎ｫ繝・・繧ｿ繧偵お繧ｯ繧ｹ繝昴・繝医＠縺ｾ縺励◆");
       saveState();
     }
 
     function bindEvents() {
-      document.getElementById("btnReload").addEventListener("click", () => {
+      document.getElementById("btnReload").addEventListener("click", async () => {
         const fresh = loadState();
         state.items = fresh.items;
         state.history = fresh.history;
-        state.categories = fresh.categories || [];
-        state.apiUrl = fresh.apiUrl;
+        state.syncMode = fresh.syncMode || "remote";
+        state.customApiUrl = fresh.customApiUrl || "";
         state.lastUpdated = fresh.lastUpdated;
         state.selectedCategory = fresh.selectedCategory;
-        state.loadedFromRemote = fresh.loadedFromRemote;
-        state.lastRemoteLoadedAt = fresh.lastRemoteLoadedAt || "";
-        state.localMode = fresh.localMode;
-        els.apiInput.value = state.localMode ? "ローカルモード" : state.apiUrl;
+    els.apiInput.value = state.syncMode === "remote" ? getEffectiveApiUrl() : "LOCAL MODE";
         render();
-        if (state.apiUrl) {
-          loadRemote();
+        if (state.syncMode === "remote") {
+          await loadRemote();
         }
       });
 
       document.getElementById("btnExport").addEventListener("click", exportJson);
       document.getElementById("btnSync").addEventListener("click", syncToRemote);
-      document.getElementById("btnOpenQuickAdd").addEventListener("click", () => openQuickAdd());
-      document.getElementById("fabAdd").addEventListener("click", () => openQuickAdd());
-      document.getElementById("btnCloseQuickAdd").addEventListener("click", closeQuickAdd);
-      document.getElementById("btnQuickAddClear").addEventListener("click", () => {
-        els.quickAddForm.reset();
-        els.quickAddForm.stock.value = 1;
-        els.quickAddForm.minStock.value = 1;
-        els.quickAddForm.unit.value = "個";
-      });
-      document.getElementById("btnQuickAddFillLast").addEventListener("click", () => {
-        els.quickAddForm.category.value = state.lastAddedCategory || selectedCategory() || "";
-      });
+      document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
 
-      els.quickAddBackdrop.addEventListener("click", (event) => {
-        if (event.target === els.quickAddBackdrop) closeQuickAdd();
-      });
-      els.modalCategoryChips.addEventListener("click", (event) => {
-        const button = event.target.closest("button[data-category]");
-        if (!button) return;
-        els.quickAddForm.elements.category.value = button.dataset.category || "";
-      });
-      document.addEventListener("keydown", (event) => {
-        if (event.key === "Escape" && els.quickAddBackdrop.classList.contains("open")) closeQuickAdd();
-        if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
-          event.preventDefault();
-          openQuickAdd();
+      document.getElementById("btnModeRemote").addEventListener("click", async () => {
+        state.syncMode = "remote";
+        if (!state.customApiUrl) {
+          state.customApiUrl = "";
         }
-      });
-
-      document.getElementById("btnModeRemote").addEventListener("click", () => {
-        state.localMode = false;
-        state.apiUrl = state.apiUrl || DEFAULT_API_URL;
-        state.loadedFromRemote = false;
-        state.lastRemoteLoadedAt = "";
-        els.apiInput.value = state.apiUrl;
-        localStorage.setItem(API_KEY, state.apiUrl);
-        localStorage.setItem(LOCAL_MODE_KEY, "false");
-        log("同期設定", "標準同期に切り替えました");
+        els.apiInput.value = getEffectiveApiUrl();
         saveState();
         render();
-        loadRemote();
+        await loadRemote();
       });
 
       document.getElementById("btnModeLocal").addEventListener("click", () => {
-        state.localMode = true;
-        state.apiUrl = "";
-        state.loadedFromRemote = false;
-        state.lastRemoteLoadedAt = "";
-        els.apiInput.value = "ローカルモード";
-        localStorage.setItem(LOCAL_MODE_KEY, "true");
-        log("同期設定", "ローカルモードに切り替えました");
+        state.syncMode = "local";
+        els.apiInput.value = "LOCAL MODE";
         saveState();
         render();
       });
 
-      document.getElementById("btnLoadRemote").addEventListener("click", loadRemote);
-
       document.getElementById("btnClearApi").addEventListener("click", () => {
-        state.localMode = true;
-        state.apiUrl = "";
-        state.loadedFromRemote = false;
-        state.lastRemoteLoadedAt = "";
-        els.apiInput.value = "ローカルモード";
-        localStorage.setItem(LOCAL_MODE_KEY, "true");
-        log("同期設定", "ローカルモードに切り替えました");
+        state.syncMode = "local";
+        els.apiInput.value = "LOCAL MODE";
         saveState();
         render();
       });
@@ -1835,31 +1376,13 @@
         event.currentTarget.reset();
         event.currentTarget.querySelector('[name="stock"]').value = 0;
         event.currentTarget.querySelector('[name="minStock"]').value = 1;
-        event.currentTarget.querySelector('[name="unit"]').value = "個";
-      });
-
-      els.quickAddForm.addEventListener("submit", (event) => {
-        event.preventDefault();
-        const form = new FormData(event.currentTarget);
-        addItem({
-          category: form.get("category"),
-          name: form.get("name"),
-          stock: form.get("stock") || 1,
-          minStock: form.get("minStock") || 1,
-          unit: form.get("unit") || "個"
-        });
-        closeQuickAdd();
-        event.currentTarget.reset();
-        event.currentTarget.elements.category.value = state.lastAddedCategory || "";
-        event.currentTarget.elements.stock.value = 1;
-        event.currentTarget.elements.minStock.value = 1;
-        event.currentTarget.elements.unit.value = "個";
+        event.currentTarget.querySelector('[name="unit"]').value = "蛟・;
       });
 
       document.getElementById("adjustForm").addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
-        adjustStock(form.get("name"), Number(form.get("delta")), form.get("memo") || "在庫調整");
+        adjustStock(form.get("name"), Number(form.get("delta")), form.get("memo") || "蝨ｨ蠎ｫ隱ｿ謨ｴ");
         event.currentTarget.reset();
         event.currentTarget.querySelector('[name="delta"]').value = -1;
       });
