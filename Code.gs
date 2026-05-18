@@ -294,24 +294,19 @@ function jsonpOrJson_(obj, callback) {
 
 function buildApiPayload_(ss) {
   const items = readInventoryItems_(ss);
-  const forecasts = buildConsumptionForecasts_(ss, items);
   return {
     status: 'ok',
     items: items,
     history: readHistory_(ss),
-    summary: buildSummary_(ss, items, forecasts),
-    categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_),
-    forecasts: forecasts
+    summary: buildSummary_(ss, items),
+    categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_)
   };
 }
 
-function buildSummary_(ss, items, forecasts) {
+function buildSummary_(ss, items) {
   items = items || readInventoryItems_(ss);
-  forecasts = forecasts || buildConsumptionForecasts_(ss, items);
   let low = 0;
   let zero = 0;
-  let forecast7 = 0;
-  let forecast14 = 0;
   const categories = {};
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
@@ -319,61 +314,11 @@ function buildSummary_(ss, items, forecasts) {
     if (Number(item.stock || 0) <= 0) zero++;
     else if (Number(item.stock || 0) < Number(item.minStock || 0)) low++;
   }
-  for (let i = 0; i < forecasts.length; i++) {
-    const daysLeft = Number(forecasts[i].daysLeft);
-    if (!Number.isFinite(daysLeft)) continue;
-    if (daysLeft <= 14) forecast14++;
-    if (daysLeft <= 7) forecast7++;
-  }
   return {
     total: items.length,
     low: low,
     zero: zero,
-    categories: Object.keys(categories).length,
-    forecast7: forecast7,
-    forecast14: forecast14
-  };
-}
-
-function buildConsumptionForecasts_(ss, items) {
-  items = items || readInventoryItems_(ss);
-  const forecasts = [];
-  for (let i = 0; i < items.length; i++) {
-    const item = items[i];
-    if (!item || !item.name) continue;
-    const forecast = buildConsumptionForecastForItem_(ss, item);
-    if (forecast) forecasts.push(forecast);
-  }
-  forecasts.sort(function(a, b) {
-    return a.daysLeft - b.daysLeft;
-  });
-  return forecasts;
-}
-
-function buildConsumptionForecastForItem_(ss, item) {
-  const daysPerUnit = getConsumptionRate(ss, item.name);
-  const stock = Number(item.stock || 0);
-  if (daysPerUnit == null || !isFinite(daysPerUnit) || daysPerUnit <= 0) return null;
-  if (!isFinite(stock) || stock < 0) return null;
-
-  const daysLeft = stock <= 0 ? 0 : Math.ceil(stock * daysPerUnit);
-  const targetDate = new Date();
-  targetDate.setHours(0, 0, 0, 0);
-  targetDate.setDate(targetDate.getDate() + daysLeft);
-
-  let urgency = 'later';
-  if (daysLeft <= 7) urgency = 'week';
-  else if (daysLeft <= 14) urgency = 'fortnight';
-
-  return {
-    name: item.name,
-    category: item.category || '',
-    stock: stock,
-    unit: defaultUnit(item.unit),
-    daysPerUnit: Number(daysPerUnit.toFixed(2)),
-    daysLeft: daysLeft,
-    targetDate: Utilities.formatDate(targetDate, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-    urgency: urgency
+    categories: Object.keys(categories).length
   };
 }
 
