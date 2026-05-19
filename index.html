@@ -1276,7 +1276,8 @@
 
     function log(title, detail) {
       state.history.unshift({ title, detail, time: new Date().toISOString() });
-      state.history = state.history.slice(0, 10);
+      state.history = state.history.slice(0, 60);
+      refreshForecastsFromHistory();
       saveState();
       renderHistory();
     }
@@ -1348,6 +1349,82 @@
           const daysB = Number.isFinite(b.daysLeft) ? b.daysLeft : Number.POSITIVE_INFINITY;
           return daysA - daysB || a.name.localeCompare(b.name, "ja");
         });
+    }
+
+    function parseHistoryDate(value) {
+      if (!value) return null;
+      if (value instanceof Date && !Number.isNaN(value.getTime())) return value;
+      const raw = String(value).trim();
+      if (!raw) return null;
+      const normalized = raw.replace(/\//g, "-");
+      const date = new Date(normalized);
+      return Number.isNaN(date.getTime()) ? null : date;
+    }
+
+    function getConsumptionHistoryRows() {
+      return (Array.isArray(state.history) ? state.history : [])
+        .map((row) => ({
+          name: String(row.item || row.name || "").trim(),
+          date: parseHistoryDate(row.date || row.time),
+          quantity: Math.abs(Number(row.quantity || row.qty || 0))
+        }))
+        .filter((row) => row.name && row.date && row.quantity > 0);
+    }
+
+    function buildForecastsFromHistory() {
+      const rowsByName = new Map();
+      getConsumptionHistoryRows().forEach((row) => {
+        const key = normalize(row.name);
+        if (!rowsByName.has(key)) rowsByName.set(key, []);
+        rowsByName.get(key).push(row);
+      });
+
+      const today = new Date();
+      today.setHours(0, 0, 0, 0);
+      const dayMs = 24 * 60 * 60 * 1000;
+
+      return normalizeForecasts(state.items.map((item) => {
+        const rows = rowsByName.get(normalize(item.name)) || [];
+        if (rows.length < 2) return null;
+        rows.sort((a, b) => a.date - b.date);
+        const firstDate = rows[0].date;
+        const lastDate = rows[rows.length - 1].date;
+        const spanDays = Math.max(1, Math.round((lastDate - firstDate) / dayMs));
+        const totalConsumed = rows.reduce((sum, row) => sum + row.quantity, 0);
+        if (totalConsumed <= 0) return null;
+
+        const daysPerUnit = spanDays / totalConsumed;
+        if (!Number.isFinite(daysPerUnit) || daysPerUnit <= 0) return null;
+
+        const stock = Number(item.stock || 0);
+        const minStock = Number(item.minStock || 0);
+        const available = Math.max(0, stock - minStock);
+        const daysLeft = available <= 0 ? 0 : Math.ceil(available * daysPerUnit);
+        const targetDate = new Date(today);
+        targetDate.setDate(targetDate.getDate() + daysLeft);
+
+        return {
+          name: item.name,
+          category: item.category,
+          unit: item.unit || "個",
+          stock,
+          minStock,
+          daysPerUnit,
+          daysLeft,
+          targetDate: targetDate.toLocaleDateString("sv-SE"),
+          sampleCount: rows.length
+        };
+      }));
+    }
+
+    function refreshForecastsFromHistory() {
+      const localForecasts = buildForecastsFromHistory();
+      if (localForecasts.length) {
+        state.forecasts = localForecasts;
+      } else {
+        state.forecasts = normalizeForecasts(state.forecasts);
+      }
+      refreshForecastsFromItems();
     }
 
     function getForecastForItem(item) {
@@ -1484,6 +1561,7 @@
     }
 
     function render() {
+      refreshForecastsFromHistory();
       renderMeta();
       renderModalCategoryChips();
       renderForecastSummary();
@@ -1838,15 +1916,12 @@
           state.items = data.items;
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
-          if (Array.isArray(data.forecasts)) state.forecasts = normalizeForecasts(data.forecasts);
+          state.forecasts = Array.isArray(data.forecasts) ? normalizeForecasts(data.forecasts) : [];
           if (data.summary) state.summary = data.summary;
-          refreshForecastsFromItems();
+          refreshForecastsFromHistory();
           state.loadedFromRemote = true;
           state.lastRemoteLoadedAt = new Date().toISOString();
           appliedRemoteData = true;
-          if (!silent) {
-            log("読み込み完了", `GAS から ${data.items.length} 件を取得しました`);
-          }
           saveState();
           render();
         } else {

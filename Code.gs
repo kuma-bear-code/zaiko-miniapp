@@ -1168,12 +1168,18 @@ function readHistory_(ss) {
   if (!sh) return [];
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return [];
-  const values = sh.getRange(2, 1, Math.min(lastRow - 1, 50), 3).getValues();
+  const limit = Math.min(lastRow - 1, 120);
+  const startRow = Math.max(2, lastRow - limit + 1);
+  const values = sh.getRange(startRow, 1, limit, 3).getValues();
   const history = [];
   for (let i = 0; i < values.length; i++) {
+    const dateValue = values[i][1];
+    const date = dateValue instanceof Date
+      ? Utilities.formatDate(dateValue, Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : String(dateValue || '');
     history.push({
       item: String(values[i][0] || ''),
-      date: String(values[i][1] || ''),
+      date: date,
       quantity: Number(values[i][2] || 0)
     });
   }
