@@ -944,6 +944,10 @@
                 <label>単位</label>
                 <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
               </div>
+              <div class="field">
+                <label>保管場所</label>
+                <input class="input" name="location" placeholder="例: 洗面所 / キッチン下" />
+              </div>
               <button class="btn success" type="submit">追加する</button>
             </form>
 
@@ -1052,6 +1056,10 @@
           <div class="field">
             <label>単位</label>
             <input class="input" name="unit" placeholder="例: 本 / 個 / 回分" value="個" required />
+          </div>
+          <div class="field">
+            <label>保管場所</label>
+            <input class="input" name="location" placeholder="例: 洗面所 / キッチン下" />
           </div>
           <div class="field">
             <label>在庫数</label>
@@ -1708,6 +1716,7 @@
               <span>${escapeHtml(item.category)}</span>
               <span>在庫 ${item.stock}${escapeHtml(item.unit)}</span>
               <span>最低 ${item.minStock}${escapeHtml(item.unit)}</span>
+              ${item.location ? `<span>保管 ${escapeHtml(item.location)}</span>` : ""}
             </div>
             <div class="item-forecast">
               <span class="forecast-badge ${forecastBadgeClass(forecast)}">${escapeHtml(formatForecastText(forecast))}</span>
@@ -1761,6 +1770,11 @@
         existing.stock = Number(data.stock);
         existing.minStock = Number(data.minStock);
         existing.unit = data.unit;
+        if (String(data.location || "").trim()) {
+          existing.location = String(data.location).trim();
+        }
+        existing.photoUrl = existing.photoUrl || "";
+        existing.note = existing.note || "";
         log("既存品目を更新", `${existing.name} を更新しました`);
       } else {
       state.items.unshift({
@@ -1768,7 +1782,10 @@
           name: data.name,
           stock: Number(data.stock),
           minStock: Number(data.minStock),
-          unit: data.unit
+          unit: data.unit,
+          photoUrl: "",
+          note: "",
+          location: data.location || ""
         });
         state.lastAddedCategory = data.category;
         log("新規追加", `${data.name} を追加しました`);
@@ -1806,11 +1823,16 @@
       if (minStock === null) return;
       const unit = prompt("単位", item.unit);
       if (unit === null) return;
+      const location = prompt("保管場所", item.location || "");
+      if (location === null) return;
       item.category = category.trim() || item.category;
       item.name = newName.trim() || item.name;
       item.stock = Math.max(0, parseInt(stock, 10) || 0);
       item.minStock = Math.max(0, parseInt(minStock, 10) || 0);
       item.unit = unit.trim() || item.unit;
+      item.location = location.trim();
+      item.photoUrl = item.photoUrl || "";
+      item.note = item.note || "";
       log("品目編集", `${item.name} を更新しました`);
       refreshForecastsFromItems();
       saveState();
@@ -2146,12 +2168,14 @@
           name: form.get("name"),
           stock: form.get("stock"),
           minStock: form.get("minStock"),
-          unit: form.get("unit")
+          unit: form.get("unit"),
+          location: form.get("location")
         });
         event.currentTarget.reset();
         event.currentTarget.querySelector('[name="stock"]').value = 0;
         event.currentTarget.querySelector('[name="minStock"]').value = 1;
         event.currentTarget.querySelector('[name="unit"]').value = "個";
+        event.currentTarget.querySelector('[name="location"]').value = "";
       });
 
       els.quickAddForm.addEventListener("submit", (event) => {
@@ -2162,7 +2186,8 @@
           name: form.get("name"),
           stock: form.get("stock") || 1,
           minStock: form.get("minStock") || 1,
-          unit: form.get("unit") || "個"
+          unit: form.get("unit") || "個",
+          location: form.get("location") || ""
         });
         closeQuickAdd();
         event.currentTarget.reset();
@@ -2170,6 +2195,7 @@
         event.currentTarget.elements.stock.value = 1;
         event.currentTarget.elements.minStock.value = 1;
         event.currentTarget.elements.unit.value = "個";
+        event.currentTarget.elements.location.value = "";
       });
 
       document.getElementById("adjustForm").addEventListener("submit", (event) => {

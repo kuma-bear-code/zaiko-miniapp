@@ -38,6 +38,7 @@ const SHEETS = {
   categories: 'Categories',
   log: 'ConsumptionLog'
 };
+const INVENTORY_COLUMNS = 8;
 
 const STATE = {
   awaitingOperation: 'awaitingOperation',
@@ -206,6 +207,10 @@ function ensureSheets_(ss) {
     if (!header[3]) inv.getRange(1, 4).setValue('最低在庫');
     if (!header[4]) inv.getRange(1, 5).setValue('単位');
   }
+
+  const invCols = inv.getLastColumn();
+  if (invCols < INVENTORY_COLUMNS) inv.insertColumnsAfter(invCols, INVENTORY_COLUMNS - invCols);
+  inv.getRange(1, 6, 1, 3).setValues([['写真URL', 'メモ', '保管場所']]);
 
   let cat = ss.getSheetByName(SHEETS.categories);
   if (!cat) {
@@ -1000,7 +1005,10 @@ function readInventoryItems_(ss) {
       name: String(v[i][1] || ''),
       stock: Number(v[i][2] || 0),
       minStock: Number(v[i][3] || 0),
-      unit: defaultUnit(v[i][4])
+      unit: defaultUnit(v[i][4]),
+      photoUrl: String(v[i][5] || ''),
+      note: String(v[i][6] || ''),
+      location: String(v[i][7] || '')
     });
   }
   return items;
@@ -1012,16 +1020,16 @@ function saveInventoryItems_(ss, items) {
   (items || []).forEach(function(input) {
     const item = normalizeInventoryItem_(input);
     if (!item.name) return;
-    rows.push([item.category, item.name, item.stock, item.minStock, item.unit]);
+    rows.push([item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]);
   });
   rows.sort(function(a, b) {
     return String(a[0]).localeCompare(String(b[0]), 'ja') || String(a[1]).localeCompare(String(b[1]), 'ja');
   });
   if (sh.getLastRow() > 1) {
-    sh.getRange(2, 1, sh.getLastRow() - 1, 5).clearContent();
+    sh.getRange(2, 1, sh.getLastRow() - 1, INVENTORY_COLUMNS).clearContent();
   }
   if (rows.length) {
-    sh.getRange(2, 1, rows.length, 5).setValues(rows);
+    sh.getRange(2, 1, rows.length, INVENTORY_COLUMNS).setValues(rows);
   }
 }
 
@@ -1032,7 +1040,10 @@ function normalizeInventoryItem_(input) {
     name: String(item.name || item['品目'] || ''),
     stock: Math.max(0, Number(item.stock != null ? item.stock : item['在庫']) || 0),
     minStock: Math.max(0, Number(item.minStock != null ? item.minStock : item['最低在庫']) || 0),
-    unit: defaultUnit(item.unit || item['単位'])
+    unit: defaultUnit(item.unit || item['単位']),
+    photoUrl: String(item.photoUrl || item.photoURL || item.imageUrl || item['写真URL'] || ''),
+    note: String(item.note || item.memo || item['メモ'] || ''),
+    location: String(item.location || item.storageLocation || item['保管場所'] || '')
   };
 }
 
@@ -1043,11 +1054,11 @@ function upsertInventoryItem_(ss, input) {
   const v = sh.getDataRange().getValues();
   for (let i = 1; i < v.length; i++) {
     if (String(v[i][1]) === item.name) {
-      sh.getRange(i + 1, 1, 1, 5).setValues([[item.category, item.name, item.stock, item.minStock, item.unit]]);
+      sh.getRange(i + 1, 1, 1, INVENTORY_COLUMNS).setValues([[item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]]);
       return true;
     }
   }
-  sh.appendRow([item.category, item.name, item.stock, item.minStock, item.unit]);
+  sh.appendRow([item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]);
   return true;
 }
 
@@ -1066,7 +1077,7 @@ function adjustInventoryItem_(ss, name, delta, memo) {
     }
   }
   if (Number(delta || 0) > 0) {
-    sh.appendRow(['', name, Number(delta || 0), 0, '個']);
+    sh.appendRow(['', name, Number(delta || 0), 0, '個', '', '', '']);
     return true;
   }
   return false;
@@ -1158,7 +1169,7 @@ function updateInitialStock(ss, name, stock) {
 function sortInventory(ss) {
   const sh = ss.getSheetByName(SHEETS.inventory);
   const lastRow = sh.getLastRow();
-  if (lastRow > 1) sh.getRange(2, 1, lastRow - 1, 5).sort([{ column: 1, ascending: true }, { column: 2, ascending: true }]);
+  if (lastRow > 1) sh.getRange(2, 1, lastRow - 1, INVENTORY_COLUMNS).sort([{ column: 1, ascending: true }, { column: 2, ascending: true }]);
 }
 
 function changeInventoryValue(ss, name, newStock) {
