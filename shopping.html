@@ -186,6 +186,17 @@
       color: #fff;
     }
 
+    .action-row {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 0 0 14px;
+    }
+
+    .action-row .btn {
+      min-height: 42px;
+    }
+
     .list {
       display: grid;
       gap: 10px;
@@ -352,6 +363,12 @@
         <button class="chip" data-filter="unchecked" type="button">未チェック</button>
       </div>
 
+      <div class="action-row">
+        <button class="btn primary" id="btnRestockSuggested" type="button">チェック済みを目安数で入庫</button>
+        <button class="btn" id="btnRestockOne" type="button">チェック済みを+1入庫</button>
+        <button class="btn" id="btnClearDone" type="button">チェックをクリア</button>
+      </div>
+
       <div class="list" id="shoppingList"></div>
       <div class="status">
         <span id="syncState">読み込み中...</span>
@@ -437,6 +454,12 @@
 
     function bindEvents() {
       document.getElementById("btnReload").addEventListener("click", loadRemote);
+      document.getElementById("btnRestockSuggested").addEventListener("click", () => restockDoneItems("suggested"));
+      document.getElementById("btnRestockOne").addEventListener("click", () => restockDoneItems("one"));
+      document.getElementById("btnClearDone").addEventListener("click", () => {
+        localStorage.removeItem(DONE_KEY);
+        render();
+      });
       document.querySelectorAll("[data-filter]").forEach((button) => {
         button.addEventListener("click", () => {
           filter = button.dataset.filter;
@@ -495,6 +518,101 @@
         els.syncState.textContent = state.items.length ? "前回データを表示中" : "読み込み失敗";
       }
       render();
+    }
+
+    function restockDoneItems(mode) {
+      const checkedRows = getAllShoppingItems().filter((row) => row.done);
+      if (!checkedRows.length) {
+        els.syncState.textContent = "チェック済みの品目がありません";
+        return;
+      }
+
+      const restocks = checkedRows.map((row) => ({
+        name: row.name,
+        quantity: mode === "one" ? 1 : row.suggested
+      })).filter((row) => row.quantity > 0);
+
+      if (!restocks.length) {
+        els.syncState.textContent = "入庫できる品目がありません";
+        return;
+      }
+
+      const label = mode === "one" ? "+1入庫" : "目安数で入庫";
+      if (!confirm(`${restocks.length}件を${label}します。よろしいですか？`)) return;
+
+      submitBulkRestock(restocks, label);
+      applyRestockLocally(restocks);
+      clearDoneFor(restocks.map((row) => row.name));
+      els.syncState.textContent = `${label}を送信しました`;
+      render();
+      setTimeout(loadRemote, 1400);
+    }
+
+    function submitBulkRestock(restocks, label) {
+      const iframeId = "shopping-restock-frame";
+      let iframe = document.getElementById(iframeId);
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = iframeId;
+        iframe.name = iframeId;
+        iframe.style.display = "none";
+        document.body.appendChild(iframe);
+      }
+
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = DEFAULT_API_URL;
+      form.target = iframeId;
+      form.style.display = "none";
+
+      const actionInput = document.createElement("input");
+      actionInput.name = "action";
+      actionInput.value = "bulkRestock";
+      form.appendChild(actionInput);
+
+      const idTokenInput = document.createElement("textarea");
+      idTokenInput.name = "idToken";
+      idTokenInput.value = lineIdToken;
+      form.appendChild(idTokenInput);
+
+      const payloadInput = document.createElement("textarea");
+      payloadInput.name = "payload";
+      payloadInput.value = JSON.stringify({
+        restocks,
+        memo: label
+      });
+      form.appendChild(payloadInput);
+
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(() => {
+        if (document.body.contains(form)) form.remove();
+      }, 500);
+    }
+
+    function applyRestockLocally(restocks) {
+      restocks.forEach((restock) => {
+        const item = state.items.find((row) => normalize(row.name) === normalize(restock.name));
+        if (!item) return;
+        item.stock = Math.max(0, Number(item.stock || 0) + Number(restock.quantity || 0));
+      });
+      state.lastUpdated = new Date().toISOString();
+      localStorage.setItem(STORAGE_KEY, JSON.stringify({
+        ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"),
+        items: state.items,
+        forecasts: state.forecasts,
+        categories: state.categories,
+        loadedFromRemote: state.loadedFromRemote,
+        lastUpdated: state.lastUpdated
+      }));
+    }
+
+    function clearDoneFor(names) {
+      const done = loadDone();
+      names.forEach((name) => {
+        delete done[normalize(name)];
+      });
+      localStorage.setItem(DONE_KEY, JSON.stringify(done));
     }
 
     function loadRemoteJsonp(action) {
@@ -620,15 +738,17 @@
         });
     }
 
+    function getAllShoppingItems() {
+      const current = filter;
+      filter = "all";
+      const rows = getShoppingItems();
+      filter = current;
+      return rows;
+    }
+
     function render() {
       const rows = getShoppingItems();
-      const allRows = (() => {
-        const current = filter;
-        filter = "all";
-        const result = getShoppingItems();
-        filter = current;
-        return result;
-      })();
+      const allRows = getAllShoppingItems();
       els.metricTotal.textContent = allRows.length;
       els.metricWeek.textContent = allRows.filter((row) => row.urgent).length;
       els.metricZero.textContent = allRows.filter((row) => row.zero).length;

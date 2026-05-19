@@ -114,6 +114,12 @@ function doPost(e) {
       return respondJson_({ status: 'ok', message: 'item adjusted', summary: buildSummary_(ss) });
     }
 
+    if (action === 'bulkRestock') {
+      const restocks = Array.isArray(body.restocks) ? body.restocks : [];
+      const result = bulkRestockItems_(ss, restocks);
+      return respondJson_({ status: 'ok', message: 'items restocked', updated: result.updated, summary: buildSummary_(ss) });
+    }
+
     if (action === 'deleteItem') {
       deleteProduct(ss, body.name);
       return respondJson_({ status: 'ok', message: 'item deleted', summary: buildSummary_(ss) });
@@ -1064,6 +1070,36 @@ function adjustInventoryItem_(ss, name, delta, memo) {
     return true;
   }
   return false;
+}
+
+function bulkRestockItems_(ss, restocks) {
+  const lock = LockService.getScriptLock();
+  const locked = lock.tryLock(5000);
+  if (!locked) throw new Error('Could not lock inventory for bulk restock.');
+  try {
+    const sh = ss.getSheetByName(SHEETS.inventory);
+    const values = sh.getDataRange().getValues();
+    const quantitiesByName = {};
+    (restocks || []).forEach(function(input) {
+      const name = String(input && input.name || '').trim();
+      const quantity = Math.max(0, Number(input && input.quantity || 0));
+      if (!name || !(quantity > 0)) return;
+      quantitiesByName[name] = (quantitiesByName[name] || 0) + quantity;
+    });
+
+    let updated = 0;
+    for (let i = 1; i < values.length; i++) {
+      const name = String(values[i][1] || '').trim();
+      const quantity = quantitiesByName[name];
+      if (!(quantity > 0)) continue;
+      const current = Number(values[i][2] || 0);
+      sh.getRange(i + 1, 3).setValue(current + quantity);
+      updated++;
+    }
+    return { updated: updated };
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function isProductExists(ss, name) {
