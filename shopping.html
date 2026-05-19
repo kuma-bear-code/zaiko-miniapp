@@ -1,0 +1,678 @@
+<!DOCTYPE html>
+<html lang="ja">
+<head>
+  <meta charset="UTF-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+  <title>買い物リスト | 在庫管理</title>
+  <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
+  <style>
+    :root {
+      --green: #06c755;
+      --green-dark: #05a647;
+      --green-soft: #e9f8ef;
+      --ink: #102018;
+      --muted: #607269;
+      --line: #dce8e1;
+      --bg: #f5fbf7;
+      --warn: #f5a623;
+      --danger: #e85d5a;
+      --blue: #2b86d1;
+      --shadow: 0 16px 44px rgba(16, 32, 24, 0.08);
+    }
+
+    * { box-sizing: border-box; }
+
+    body {
+      margin: 0;
+      font-family: "Hiragino Kaku Gothic ProN", "Yu Gothic", "Meiryo", sans-serif;
+      color: var(--ink);
+      background:
+        linear-gradient(180deg, rgba(6, 199, 85, 0.16) 0%, rgba(245, 251, 247, 0) 260px),
+        var(--bg);
+    }
+
+    button, input, select, textarea {
+      font: inherit;
+    }
+
+    .app {
+      width: min(1040px, 100%);
+      margin: 0 auto;
+      padding: 18px;
+    }
+
+    .topbar {
+      position: sticky;
+      top: 0;
+      z-index: 20;
+      margin: -18px -18px 16px;
+      padding: 18px;
+      background: linear-gradient(135deg, #06c755 0%, #00b84d 100%);
+      color: #fff;
+      box-shadow: 0 16px 36px rgba(6, 199, 85, 0.22);
+    }
+
+    .topbar-inner {
+      width: min(1040px, 100%);
+      margin: 0 auto;
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 14px;
+    }
+
+    .brand {
+      display: flex;
+      align-items: center;
+      gap: 12px;
+      min-width: 0;
+    }
+
+    .brand-badge {
+      width: 46px;
+      height: 46px;
+      border-radius: 14px;
+      display: grid;
+      place-items: center;
+      background: rgba(255, 255, 255, 0.18);
+      border: 1px solid rgba(255, 255, 255, 0.24);
+      font-weight: 900;
+      font-size: 22px;
+      flex: 0 0 auto;
+    }
+
+    h1, h2, h3, p {
+      margin-top: 0;
+    }
+
+    h1 {
+      margin-bottom: 4px;
+      font-size: clamp(20px, 4vw, 28px);
+      line-height: 1.25;
+      letter-spacing: 0;
+    }
+
+    .brand p {
+      margin: 0;
+      opacity: 0.9;
+      font-size: 13px;
+      line-height: 1.5;
+    }
+
+    .top-actions {
+      display: flex;
+      gap: 8px;
+      flex-wrap: wrap;
+      justify-content: flex-end;
+    }
+
+    .btn {
+      min-height: 40px;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      padding: 9px 12px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 800;
+      text-decoration: none;
+      display: inline-flex;
+      align-items: center;
+      justify-content: center;
+      gap: 6px;
+    }
+
+    .btn.primary {
+      border-color: transparent;
+      background: var(--green);
+      color: #fff;
+    }
+
+    .btn.ghost {
+      border-color: rgba(255, 255, 255, 0.28);
+      background: rgba(255, 255, 255, 0.16);
+      color: #fff;
+    }
+
+    .summary-grid {
+      display: grid;
+      grid-template-columns: repeat(3, minmax(0, 1fr));
+      gap: 10px;
+      margin-bottom: 14px;
+    }
+
+    .metric {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 13px;
+      box-shadow: var(--shadow);
+    }
+
+    .metric strong {
+      display: block;
+      font-size: 28px;
+      line-height: 1.1;
+      margin-top: 4px;
+    }
+
+    .metric span {
+      color: var(--muted);
+      font-size: 12px;
+      font-weight: 800;
+    }
+
+    .toolbar {
+      display: flex;
+      flex-wrap: wrap;
+      gap: 8px;
+      margin: 14px 0;
+    }
+
+    .chip {
+      border: 1px solid var(--line);
+      border-radius: 999px;
+      padding: 9px 13px;
+      background: #fff;
+      color: var(--ink);
+      cursor: pointer;
+      font-weight: 900;
+      font-size: 13px;
+    }
+
+    .chip.active {
+      border-color: var(--green);
+      background: var(--green);
+      color: #fff;
+    }
+
+    .list {
+      display: grid;
+      gap: 10px;
+    }
+
+    .item {
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      background: #fff;
+      padding: 14px;
+      display: grid;
+      grid-template-columns: auto 1fr auto;
+      gap: 12px;
+      align-items: start;
+      box-shadow: 0 10px 26px rgba(16, 32, 24, 0.06);
+    }
+
+    .check {
+      width: 24px;
+      height: 24px;
+      margin-top: 2px;
+      accent-color: var(--green);
+    }
+
+    .item.done {
+      opacity: 0.5;
+    }
+
+    .item.done .name {
+      text-decoration: line-through;
+    }
+
+    .name {
+      font-weight: 900;
+      font-size: 16px;
+      line-height: 1.4;
+      word-break: break-word;
+    }
+
+    .meta {
+      margin-top: 6px;
+      display: flex;
+      flex-wrap: wrap;
+      gap: 6px;
+      color: var(--muted);
+      font-size: 12px;
+      line-height: 1.5;
+    }
+
+    .badge {
+      border-radius: 999px;
+      padding: 5px 8px;
+      background: #f3f7f4;
+      color: var(--muted);
+      font-weight: 800;
+    }
+
+    .badge.danger { background: #fff0ef; color: #c73b38; }
+    .badge.warn { background: #fff7e8; color: #9c6508; }
+    .badge.green { background: var(--green-soft); color: #136f39; }
+    .badge.blue { background: #eef7ff; color: #1e6ba8; }
+
+    .qty {
+      min-width: 88px;
+      text-align: right;
+      font-weight: 900;
+    }
+
+    .empty {
+      border: 1px dashed var(--line);
+      border-radius: 8px;
+      background: rgba(255, 255, 255, 0.7);
+      padding: 20px;
+      color: var(--muted);
+      text-align: center;
+      line-height: 1.7;
+    }
+
+    .status {
+      display: flex;
+      justify-content: space-between;
+      align-items: center;
+      gap: 10px;
+      color: var(--muted);
+      font-size: 12px;
+      margin: 10px 0 0;
+    }
+
+    .auth-screen {
+      min-height: 100vh;
+      display: none;
+      align-items: center;
+      justify-content: center;
+      padding: 24px;
+    }
+
+    .auth-card {
+      width: min(420px, 100%);
+      background: #fff;
+      border: 1px solid var(--line);
+      border-radius: 8px;
+      box-shadow: var(--shadow);
+      padding: 22px;
+    }
+
+    body.auth-pending .app,
+    body.auth-denied .app {
+      display: none;
+    }
+
+    body.auth-pending .auth-screen,
+    body.auth-denied .auth-screen {
+      display: flex;
+    }
+
+    @media (max-width: 720px) {
+      .app { padding: 12px; }
+      .topbar { margin: -12px -12px 14px; padding: 14px 12px; }
+      .topbar-inner { align-items: flex-start; flex-direction: column; }
+      .summary-grid { grid-template-columns: 1fr; }
+      .item { grid-template-columns: auto 1fr; }
+      .qty { grid-column: 2; text-align: left; }
+    }
+  </style>
+</head>
+<body class="auth-pending">
+  <div class="auth-screen" id="authScreen">
+    <div class="auth-card">
+      <h1 id="authTitle">LINEログイン確認中</h1>
+      <p id="authMessage">許可されたLINEアカウントか確認しています。</p>
+      <button class="btn primary" id="btnLineLogin" type="button" style="display:none;">LINEでログイン</button>
+    </div>
+  </div>
+
+  <div class="app">
+    <header class="topbar">
+      <div class="topbar-inner">
+        <div class="brand">
+          <div class="brand-badge">買</div>
+          <div>
+            <h1>買い物リスト</h1>
+            <p>低在庫と消費予測から、今日買うものだけに絞るページ</p>
+          </div>
+        </div>
+        <div class="top-actions">
+          <a class="btn ghost" href="./index.html">在庫管理へ</a>
+          <button class="btn ghost" id="btnReload" type="button">再読み込み</button>
+        </div>
+      </div>
+    </header>
+
+    <main>
+      <section class="summary-grid">
+        <div class="metric"><span>買い物候補</span><strong id="metricTotal">0</strong></div>
+        <div class="metric"><span>1週間以内</span><strong id="metricWeek">0</strong></div>
+        <div class="metric"><span>在庫切れ</span><strong id="metricZero">0</strong></div>
+      </section>
+
+      <div class="toolbar">
+        <button class="chip active" data-filter="all" type="button">すべて</button>
+        <button class="chip" data-filter="urgent" type="button">1週間以内</button>
+        <button class="chip" data-filter="low" type="button">低在庫</button>
+        <button class="chip" data-filter="zero" type="button">在庫切れ</button>
+        <button class="chip" data-filter="unchecked" type="button">未チェック</button>
+      </div>
+
+      <div class="list" id="shoppingList"></div>
+      <div class="status">
+        <span id="syncState">読み込み中...</span>
+        <span id="lastUpdated">-</span>
+      </div>
+    </main>
+  </div>
+
+  <script>
+    const STORAGE_KEY = "inventory_console_state_v2";
+    const DONE_KEY = "shopping_list_done_v1";
+    const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx6IKSwS9-65CoZzNHUfhOgvCRB8F7YQPsikDtGJ_cw42Fay8hX2dOHTbaMR1-8riZ7/exec";
+    const LIFF_ID = "2010110468-3HNQTQLt";
+    const LINE_AUTH_ENABLED = Boolean(LIFF_ID);
+
+    let lineIdToken = "";
+    let filter = "all";
+    let state = {
+      items: [],
+      forecasts: [],
+      categories: [],
+      loadedFromRemote: false,
+      lastUpdated: new Date().toISOString()
+    };
+
+    const els = {
+      list: document.getElementById("shoppingList"),
+      syncState: document.getElementById("syncState"),
+      lastUpdated: document.getElementById("lastUpdated"),
+      metricTotal: document.getElementById("metricTotal"),
+      metricWeek: document.getElementById("metricWeek"),
+      metricZero: document.getElementById("metricZero"),
+      authTitle: document.getElementById("authTitle"),
+      authMessage: document.getElementById("authMessage"),
+      btnLineLogin: document.getElementById("btnLineLogin")
+    };
+
+    init();
+
+    async function init() {
+      if (LINE_AUTH_ENABLED) {
+        document.body.classList.add("auth-pending");
+        const ok = await initializeLineAuth();
+        if (!ok) return;
+      }
+      document.body.classList.remove("auth-pending", "auth-denied");
+      bindEvents();
+      loadLocalState();
+      render();
+      await loadRemote();
+    }
+
+    async function initializeLineAuth() {
+      try {
+        if (!window.liff) throw new Error("LIFF SDK not loaded");
+        await liff.init({ liffId: LIFF_ID });
+        if (!liff.isLoggedIn()) {
+          els.authTitle.textContent = "LINEログインが必要です";
+          els.authMessage.textContent = "買い物リストを開くにはLINEログインしてください。";
+          els.btnLineLogin.style.display = "inline-flex";
+          els.btnLineLogin.onclick = () => liff.login({ redirectUri: location.href });
+          return false;
+        }
+        lineIdToken = liff.getIDToken() || "";
+        if (!lineIdToken) {
+          showAuthError("LINEログイン情報を取得できませんでした。もう一度開き直してください。");
+          return false;
+        }
+        return true;
+      } catch {
+        showAuthError("LINEログインの初期化に失敗しました。LIFF設定を確認してください。");
+        return false;
+      }
+    }
+
+    function showAuthError(message) {
+      document.body.classList.remove("auth-pending");
+      document.body.classList.add("auth-denied");
+      els.authTitle.textContent = "アクセスできません";
+      els.authMessage.textContent = message;
+      els.btnLineLogin.style.display = "none";
+    }
+
+    function bindEvents() {
+      document.getElementById("btnReload").addEventListener("click", loadRemote);
+      document.querySelectorAll("[data-filter]").forEach((button) => {
+        button.addEventListener("click", () => {
+          filter = button.dataset.filter;
+          document.querySelectorAll("[data-filter]").forEach((chip) => chip.classList.toggle("active", chip === button));
+          render();
+        });
+      });
+      els.list.addEventListener("change", (event) => {
+        const checkbox = event.target.closest("[data-done]");
+        if (!checkbox) return;
+        const done = loadDone();
+        done[checkbox.dataset.done] = checkbox.checked;
+        localStorage.setItem(DONE_KEY, JSON.stringify(done));
+        render();
+      });
+    }
+
+    function loadLocalState() {
+      try {
+        const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
+        state = {
+          items: Array.isArray(parsed.items) ? parsed.items : [],
+          forecasts: normalizeForecasts(parsed.forecasts),
+          categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+          loadedFromRemote: Boolean(parsed.loadedFromRemote),
+          lastUpdated: parsed.lastUpdated || new Date().toISOString()
+        };
+      } catch {
+        state = { items: [], forecasts: [], categories: [], loadedFromRemote: false, lastUpdated: new Date().toISOString() };
+      }
+    }
+
+    async function loadRemote() {
+      els.syncState.textContent = "読み込み中...";
+      try {
+        const data = await loadRemoteJsonp("data");
+        if (!data || data.status === "error" || !Array.isArray(data.items)) {
+          throw new Error(data && data.message ? data.message : "invalid payload");
+        }
+        state.items = data.items;
+        state.forecasts = normalizeForecasts(data.forecasts);
+        state.categories = Array.isArray(data.categories) ? data.categories : [];
+        state.loadedFromRemote = true;
+        state.lastUpdated = new Date().toISOString();
+        localStorage.setItem(STORAGE_KEY, JSON.stringify({
+          ...JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}"),
+          items: state.items,
+          forecasts: state.forecasts,
+          categories: state.categories,
+          loadedFromRemote: true,
+          lastUpdated: state.lastUpdated
+        }));
+        els.syncState.textContent = "GAS読込済み";
+      } catch (err) {
+        console.error("shopping load failed", err);
+        els.syncState.textContent = state.items.length ? "前回データを表示中" : "読み込み失敗";
+      }
+      render();
+    }
+
+    function loadRemoteJsonp(action) {
+      return new Promise((resolve, reject) => {
+        const callbackName = `shoppingRemote_${Date.now()}_${Math.floor(Math.random() * 10000)}`;
+        const script = document.createElement("script");
+        const timer = setTimeout(() => {
+          cleanup();
+          reject(new Error("timeout"));
+        }, 15000);
+        function cleanup() {
+          clearTimeout(timer);
+          delete window[callbackName];
+          script.remove();
+        }
+        window[callbackName] = (data) => {
+          cleanup();
+          resolve(data);
+        };
+        const joiner = DEFAULT_API_URL.includes("?") ? "&" : "?";
+        script.src = `${DEFAULT_API_URL}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}&idToken=${encodeURIComponent(lineIdToken)}`;
+        script.onerror = () => {
+          cleanup();
+          reject(new Error("network error"));
+        };
+        document.head.appendChild(script);
+      });
+    }
+
+    function normalize(value) {
+      return String(value || "").trim().toLowerCase();
+    }
+
+    function normalizeForecasts(forecasts) {
+      if (!Array.isArray(forecasts)) return [];
+      return forecasts
+        .map((forecast) => {
+          if (!forecast || !forecast.name) return null;
+          const daysLeft = Number(forecast.daysLeft ?? forecast.daysToMin);
+          const daysPerUnit = Number(forecast.daysPerUnit);
+          return {
+            name: String(forecast.name || ""),
+            category: String(forecast.category || "未分類"),
+            unit: String(forecast.unit || "個"),
+            stock: Number(forecast.stock || 0),
+            minStock: Number(forecast.minStock || 0),
+            daysLeft: Number.isFinite(daysLeft) ? Math.max(0, Math.ceil(daysLeft)) : null,
+            daysPerUnit: Number.isFinite(daysPerUnit) ? daysPerUnit : null,
+            targetDate: String(forecast.targetDate || forecast.nextPurchaseDate || ""),
+            basis: String(forecast.basis || ""),
+            sampleCount: Number(forecast.sampleCount || 0)
+          };
+        })
+        .filter(Boolean)
+        .sort((a, b) => {
+          const daysA = Number.isFinite(a.daysLeft) ? a.daysLeft : Number.POSITIVE_INFINITY;
+          const daysB = Number.isFinite(b.daysLeft) ? b.daysLeft : Number.POSITIVE_INFINITY;
+          return daysA - daysB || a.name.localeCompare(b.name, "ja");
+        });
+    }
+
+    function loadDone() {
+      try {
+        return JSON.parse(localStorage.getItem(DONE_KEY) || "{}");
+      } catch {
+        return {};
+      }
+    }
+
+    function getForecast(item) {
+      return state.forecasts.find((forecast) => normalize(forecast.name) === normalize(item.name)) || null;
+    }
+
+    function getShoppingItems() {
+      const done = loadDone();
+      const rows = state.items.map((item) => {
+        const stock = Number(item.stock || 0);
+        const minStock = Number(item.minStock || 0);
+        const shortage = Math.max(0, minStock - stock);
+        const forecast = getForecast(item);
+        const daysLeft = forecast && Number.isFinite(forecast.daysLeft) ? forecast.daysLeft : null;
+        const zero = stock <= 0;
+        const low = stock < minStock;
+        const urgent = daysLeft !== null && daysLeft <= 7;
+        const soon = daysLeft !== null && daysLeft <= 14;
+        if (!zero && !low && !soon) return null;
+        const suggested = Math.max(shortage, minStock || 1, 1);
+        return {
+          id: normalize(item.name),
+          name: item.name,
+          category: item.category || "未分類",
+          unit: item.unit || "個",
+          stock,
+          minStock,
+          shortage,
+          suggested,
+          zero,
+          low,
+          urgent,
+          soon,
+          forecast,
+          done: Boolean(done[normalize(item.name)])
+        };
+      }).filter(Boolean);
+
+      return rows
+        .filter((row) => {
+          if (filter === "urgent") return row.urgent;
+          if (filter === "low") return row.low;
+          if (filter === "zero") return row.zero;
+          if (filter === "unchecked") return !row.done;
+          return true;
+        })
+        .sort((a, b) => {
+          const doneDiff = Number(a.done) - Number(b.done);
+          if (doneDiff) return doneDiff;
+          const rankA = a.zero ? 0 : (a.urgent ? 1 : (a.low ? 2 : 3));
+          const rankB = b.zero ? 0 : (b.urgent ? 1 : (b.low ? 2 : 3));
+          if (rankA !== rankB) return rankA - rankB;
+          const daysA = a.forecast && Number.isFinite(a.forecast.daysLeft) ? a.forecast.daysLeft : Number.POSITIVE_INFINITY;
+          const daysB = b.forecast && Number.isFinite(b.forecast.daysLeft) ? b.forecast.daysLeft : Number.POSITIVE_INFINITY;
+          return daysA - daysB || a.category.localeCompare(b.category, "ja") || a.name.localeCompare(b.name, "ja");
+        });
+    }
+
+    function render() {
+      const rows = getShoppingItems();
+      const allRows = (() => {
+        const current = filter;
+        filter = "all";
+        const result = getShoppingItems();
+        filter = current;
+        return result;
+      })();
+      els.metricTotal.textContent = allRows.length;
+      els.metricWeek.textContent = allRows.filter((row) => row.urgent).length;
+      els.metricZero.textContent = allRows.filter((row) => row.zero).length;
+      els.lastUpdated.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
+
+      if (!rows.length) {
+        els.list.innerHTML = `<div class="empty">今の条件では買い物候補はありません。</div>`;
+        return;
+      }
+
+      els.list.innerHTML = rows.map((row) => {
+        const forecastText = row.forecast && Number.isFinite(row.forecast.daysLeft)
+          ? `残り${row.forecast.daysLeft}日`
+          : "予測なし";
+        const forecastTone = row.urgent ? "danger" : (row.soon ? "warn" : "blue");
+        const basis = row.forecast && row.forecast.basis === "recent90" ? "直近90日" : (row.forecast ? "全期間" : "");
+        const reason = row.zero ? "在庫切れ" : (row.low ? "低在庫" : "切れそう");
+        return `
+          <article class="item ${row.done ? "done" : ""}">
+            <input class="check" type="checkbox" data-done="${escapeHtml(row.id)}" ${row.done ? "checked" : ""} />
+            <div>
+              <div class="name">${escapeHtml(row.name)}</div>
+              <div class="meta">
+                <span class="badge green">${escapeHtml(row.category)}</span>
+                <span class="badge ${row.zero ? "danger" : (row.low ? "warn" : "blue")}">${escapeHtml(reason)}</span>
+                <span class="badge ${forecastTone}">${escapeHtml(forecastText)}</span>
+                ${basis ? `<span class="badge">${escapeHtml(basis)}</span>` : ""}
+                <span class="badge">在庫 ${row.stock}${escapeHtml(row.unit)} / 最低 ${row.minStock}${escapeHtml(row.unit)}</span>
+              </div>
+            </div>
+            <div class="qty">目安 ${row.suggested}${escapeHtml(row.unit)}</div>
+          </article>
+        `;
+      }).join("");
+    }
+
+    function escapeHtml(str) {
+      return String(str)
+        .replaceAll("&", "&amp;")
+        .replaceAll("<", "&lt;")
+        .replaceAll(">", "&gt;")
+        .replaceAll('"', "&quot;")
+        .replaceAll("'", "&#39;");
+    }
+  </script>
+</body>
+</html>
