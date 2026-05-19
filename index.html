@@ -1419,7 +1419,10 @@
 
     function refreshForecastsFromHistory() {
       const localForecasts = buildForecastsFromHistory();
-      if (localForecasts.length) {
+      const hasRemoteForecasts = Array.isArray(state.forecasts) && state.forecasts.length > 0;
+      if (hasRemoteForecasts) {
+        state.forecasts = normalizeForecasts(state.forecasts);
+      } else if (localForecasts.length) {
         state.forecasts = localForecasts;
       } else {
         state.forecasts = normalizeForecasts(state.forecasts);

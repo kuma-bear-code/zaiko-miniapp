@@ -294,12 +294,14 @@ function jsonpOrJson_(obj, callback) {
 
 function buildApiPayload_(ss) {
   const items = readInventoryItems_(ss);
+  const forecasts = buildConsumptionForecasts_(ss, items);
   return {
     status: 'ok',
     items: items,
     history: readHistory_(ss),
     summary: buildSummary_(ss, items),
-    categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_)
+    categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_),
+    forecasts: forecasts
   };
 }
 
@@ -1184,6 +1186,117 @@ function readHistory_(ss) {
     });
   }
   return history.reverse();
+}
+
+function buildConsumptionForecasts_(ss, items) {
+  const statsByName = readConsumptionStats_(ss);
+  const now = new Date();
+  const forecasts = [];
+  for (let i = 0; i < items.length; i++) {
+    const item = items[i];
+    const name = String(item.name || '').trim();
+    const stats = statsByName[normalizeKey_(name)];
+    const forecast = buildConsumptionForecastForItem_(item, stats, now);
+    if (forecast) forecasts.push(forecast);
+  }
+  forecasts.sort(function(a, b) {
+    return a.daysLeft - b.daysLeft || String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+  });
+  return forecasts;
+}
+
+function readConsumptionStats_(ss) {
+  const sh = ss.getSheetByName(SHEETS.log);
+  const stats = {};
+  if (!sh) return stats;
+  const lastRow = sh.getLastRow();
+  if (lastRow < 2) return stats;
+
+  const values = sh.getRange(2, 1, lastRow - 1, 3).getValues();
+  const now = new Date();
+  const recentStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+
+  for (let i = 0; i < values.length; i++) {
+    const name = String(values[i][0] || '').trim();
+    const dateValue = values[i][1];
+    const date = dateValue instanceof Date ? dateValue : new Date(String(dateValue || ''));
+    const quantity = Math.abs(Number(values[i][2] || 0));
+    if (!name || isNaN(date.getTime()) || !(quantity > 0)) continue;
+
+    const key = normalizeKey_(name);
+    if (!stats[key]) {
+      stats[key] = {
+        name: name,
+        all: emptyConsumptionBucket_(),
+        recent: emptyConsumptionBucket_()
+      };
+    }
+    addConsumptionRecord_(stats[key].all, date, quantity);
+    if (date >= recentStart) addConsumptionRecord_(stats[key].recent, date, quantity);
+  }
+  return stats;
+}
+
+function emptyConsumptionBucket_() {
+  return {
+    count: 0,
+    quantity: 0,
+    firstDate: null,
+    lastDate: null
+  };
+}
+
+function addConsumptionRecord_(bucket, date, quantity) {
+  bucket.count++;
+  bucket.quantity += quantity;
+  if (!bucket.firstDate || date < bucket.firstDate) bucket.firstDate = date;
+  if (!bucket.lastDate || date > bucket.lastDate) bucket.lastDate = date;
+}
+
+function buildConsumptionForecastForItem_(item, stats, now) {
+  if (!item || !stats) return null;
+  const bucket = chooseConsumptionBucket_(stats);
+  if (!bucket || bucket.count < 2 || !(bucket.quantity > 0)) return null;
+
+  const spanDays = Math.max(1, Math.round((bucket.lastDate - bucket.firstDate) / (1000 * 60 * 60 * 24)));
+  const daysPerUnit = spanDays / bucket.quantity;
+  if (!(daysPerUnit > 0)) return null;
+
+  const stock = Number(item.stock || 0);
+  const minStock = Number(item.minStock || 0);
+  const available = Math.max(0, stock - minStock);
+  const daysLeft = available <= 0 ? 0 : Math.ceil(available * daysPerUnit);
+  const targetDate = new Date(now.getTime());
+  targetDate.setHours(0, 0, 0, 0);
+  targetDate.setDate(targetDate.getDate() + daysLeft);
+
+  return {
+    name: String(item.name || ''),
+    category: String(item.category || '未分類'),
+    unit: String(item.unit || '個'),
+    stock: stock,
+    minStock: minStock,
+    daysPerUnit: Math.round(daysPerUnit * 10) / 10,
+    daysLeft: daysLeft,
+    targetDate: Utilities.formatDate(targetDate, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
+    sampleCount: bucket.count,
+    totalConsumed: bucket.quantity,
+    basis: bucket === stats.recent ? 'recent90' : 'all'
+  };
+}
+
+function chooseConsumptionBucket_(stats) {
+  if (stats.recent && stats.recent.count >= 2 && stats.recent.quantity > 0) {
+    return stats.recent;
+  }
+  if (stats.all && stats.all.count >= 2 && stats.all.quantity > 0) {
+    return stats.all;
+  }
+  return null;
+}
+
+function normalizeKey_(value) {
+  return String(value || '').trim().toLowerCase();
 }
 
 function readInventoryCategories_(items) {
