@@ -1106,6 +1106,7 @@
     let syncInFlight = false;
     let syncPending = false;
     let lineIdToken = "";
+    let editingOriginalName = "";
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1128,6 +1129,7 @@
       ,
       quickAddBackdrop: document.getElementById("quickAddBackdrop"),
       quickAddForm: document.getElementById("quickAddForm"),
+      quickAddTitle: document.getElementById("quickAddTitle"),
       modalCategoryChips: document.getElementById("modalCategoryChips"),
       authTitle: document.getElementById("authTitle"),
       authMessage: document.getElementById("authMessage"),
@@ -1501,7 +1503,11 @@
     }
 
     function openQuickAdd(category = "") {
+      editingOriginalName = "";
       const form = els.quickAddForm;
+      els.quickAddTitle.textContent = "クイック追加";
+      form.querySelector('[type="submit"]').textContent = "追加する";
+      form.reset();
       form.category.value = category || state.lastAddedCategory || (selectedCategory() === "all" ? "" : selectedCategory());
       if (!form.category.value) {
         const firstCategory = allCategories()[0] || "";
@@ -1515,9 +1521,30 @@
       setTimeout(() => form.name.focus(), 50);
     }
 
+    function openEditModal(name) {
+      const item = state.items.find((row) => normalize(row.name) === normalize(name));
+      if (!item) return;
+      editingOriginalName = item.name;
+      const form = els.quickAddForm;
+      els.quickAddTitle.textContent = "品目編集";
+      form.querySelector('[type="submit"]').textContent = "保存する";
+      form.category.value = item.category || "";
+      form.name.value = item.name || "";
+      form.unit.value = item.unit || "個";
+      form.location.value = item.location || "";
+      form.stock.value = Number(item.stock || 0);
+      form.minStock.value = Number(item.minStock || 0);
+      els.quickAddBackdrop.classList.add("open");
+      els.quickAddBackdrop.setAttribute("aria-hidden", "false");
+      setTimeout(() => form.location.focus(), 50);
+    }
+
     function closeQuickAdd() {
       els.quickAddBackdrop.classList.remove("open");
       els.quickAddBackdrop.setAttribute("aria-hidden", "true");
+      editingOriginalName = "";
+      els.quickAddTitle.textContent = "クイック追加";
+      els.quickAddForm.querySelector('[type="submit"]').textContent = "追加する";
     }
 
     function renderModalCategoryChips() {
@@ -1763,16 +1790,18 @@
       }).join("");
     }
 
-    function addItem(data) {
-      const existing = state.items.find((item) => normalize(item.name) === normalize(data.name));
+    function addItem(data, originalName = "") {
+      const existing = state.items.find((item) => {
+        if (originalName && normalize(item.name) === normalize(originalName)) return true;
+        return normalize(item.name) === normalize(data.name);
+      });
       if (existing) {
         existing.category = data.category;
+        existing.name = data.name;
         existing.stock = Number(data.stock);
         existing.minStock = Number(data.minStock);
         existing.unit = data.unit;
-        if (String(data.location || "").trim()) {
-          existing.location = String(data.location).trim();
-        }
+        existing.location = String(data.location || "").trim();
         existing.photoUrl = existing.photoUrl || "";
         existing.note = existing.note || "";
         log("既存品目を更新", `${existing.name} を更新しました`);
@@ -1811,33 +1840,7 @@
     }
 
     function editItem(name) {
-      const item = state.items.find((row) => normalize(row.name) === normalize(name));
-      if (!item) return;
-      const category = prompt("分類", item.category);
-      if (category === null) return;
-      const newName = prompt("品目名", item.name);
-      if (newName === null) return;
-      const stock = prompt("在庫数", String(item.stock));
-      if (stock === null) return;
-      const minStock = prompt("最低在庫", String(item.minStock));
-      if (minStock === null) return;
-      const unit = prompt("単位", item.unit);
-      if (unit === null) return;
-      const location = prompt("保管場所", item.location || "");
-      if (location === null) return;
-      item.category = category.trim() || item.category;
-      item.name = newName.trim() || item.name;
-      item.stock = Math.max(0, parseInt(stock, 10) || 0);
-      item.minStock = Math.max(0, parseInt(minStock, 10) || 0);
-      item.unit = unit.trim() || item.unit;
-      item.location = location.trim();
-      item.photoUrl = item.photoUrl || "";
-      item.note = item.note || "";
-      log("品目編集", `${item.name} を更新しました`);
-      refreshForecastsFromItems();
-      saveState();
-      render();
-      queueRemoteSync("編集");
+      openEditModal(name);
     }
 
     function deleteItem(name) {
@@ -2181,6 +2184,7 @@
       els.quickAddForm.addEventListener("submit", (event) => {
         event.preventDefault();
         const form = new FormData(event.currentTarget);
+        const originalName = editingOriginalName;
         addItem({
           category: form.get("category"),
           name: form.get("name"),
@@ -2188,7 +2192,7 @@
           minStock: form.get("minStock") || 1,
           unit: form.get("unit") || "個",
           location: form.get("location") || ""
-        });
+        }, originalName);
         closeQuickAdd();
         event.currentTarget.reset();
         event.currentTarget.elements.category.value = state.lastAddedCategory || "";
