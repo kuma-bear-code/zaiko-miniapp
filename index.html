@@ -1107,6 +1107,7 @@
     let syncPending = false;
     let lineIdToken = "";
     let editingOriginalName = "";
+    let remoteActionSeq = 0;
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1836,7 +1837,7 @@
       refreshForecastsFromItems();
       saveState();
       render();
-      queueRemoteSync("在庫調整");
+      submitAdjustItem(item.name, delta, label);
     }
 
     function editItem(name) {
@@ -1853,6 +1854,67 @@
       queueRemoteSync("削除");
     }
 
+    function ensureSyncFrame(id) {
+      let iframe = document.getElementById(id);
+      if (!iframe) {
+        iframe = document.createElement("iframe");
+        iframe.id = id;
+        iframe.name = id;
+        iframe.style.display = "none";
+        document.body.appendChild(iframe);
+      }
+      return iframe;
+    }
+
+    function submitFormToGas(action, payload, frameId) {
+      const iframe = ensureSyncFrame(frameId);
+      const form = document.createElement("form");
+      form.method = "POST";
+      form.action = state.apiUrl;
+      form.target = iframe.name;
+      form.style.display = "none";
+
+      const actionInput = document.createElement("input");
+      actionInput.name = "action";
+      actionInput.value = action;
+      form.appendChild(actionInput);
+
+      const idTokenInput = document.createElement("textarea");
+      idTokenInput.name = "idToken";
+      idTokenInput.value = lineIdToken;
+      form.appendChild(idTokenInput);
+
+      const payloadInput = document.createElement("textarea");
+      payloadInput.name = "payload";
+      payloadInput.value = JSON.stringify(payload || {});
+      form.appendChild(payloadInput);
+
+      document.body.appendChild(form);
+      form.submit();
+      setTimeout(() => {
+        if (document.body.contains(form)) document.body.removeChild(form);
+      }, 500);
+    }
+
+    function scheduleRemoteVerify(message, delay = 2500) {
+      const seq = ++remoteActionSeq;
+      setTimeout(async () => {
+        if (seq !== remoteActionSeq) return;
+        const verified = await loadRemote({ silent: true, auto: true });
+        els.syncState.textContent = verified ? message : "反映確認に失敗しました";
+      }, delay);
+    }
+
+    function submitAdjustItem(name, delta, memo) {
+      if (!state.apiUrl) {
+        els.syncState.textContent = "API URL が未設定です";
+        return;
+      }
+      submitFormToGas("adjustItem", { name, delta, memo }, "inventory-adjust-frame");
+      els.syncState.textContent = "在庫調整を送信しました";
+      scheduleRemoteVerify("在庫調整を反映しました");
+    }
+
     async function syncToRemote(reason = "手動同期") {
       if (!state.apiUrl) {
         alert("先に API URL を設定してください。");
@@ -1862,56 +1924,25 @@
         syncPending = true;
         return;
       }
+      let submitted = false;
       try {
         syncInFlight = true;
         els.syncState.textContent = "同期中...";
-        const iframeId = "inventory-sync-frame";
-        let iframe = document.getElementById(iframeId);
-        if (!iframe) {
-          iframe = document.createElement("iframe");
-          iframe.id = iframeId;
-          iframe.name = iframeId;
-          iframe.style.display = "none";
-          document.body.appendChild(iframe);
-        }
-
-        const form = document.createElement("form");
-        form.method = "POST";
-        form.action = state.apiUrl;
-        form.target = iframeId;
-        form.style.display = "none";
-
-        const actionInput = document.createElement("input");
-        actionInput.name = "action";
-        actionInput.value = "saveInventory";
-        form.appendChild(actionInput);
-
-        const idTokenInput = document.createElement("textarea");
-        idTokenInput.name = "idToken";
-        idTokenInput.value = lineIdToken;
-        form.appendChild(idTokenInput);
-
-        const payloadInput = document.createElement("textarea");
-        payloadInput.name = "payload";
-        payloadInput.value = JSON.stringify({
+        submitFormToGas("saveInventory", {
           items: state.items,
           history: state.history
-        });
-        form.appendChild(payloadInput);
-
-        document.body.appendChild(form);
-        form.submit();
-        setTimeout(() => {
-          if (document.body.contains(form)) document.body.removeChild(form);
-        }, 500);
+        }, "inventory-sync-frame");
+        submitted = true;
         syncPending = false;
         state.lastRemoteLoadedAt = new Date().toISOString();
-        log("同期完了", `GAS へ在庫データ送信を実行しました (${reason})`);
+        els.syncState.textContent = "同期を送信しました";
+        scheduleRemoteVerify(`同期を確認しました (${reason})`);
       } catch {
         alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
       } finally {
         syncInFlight = false;
         renderMeta();
+        if (submitted) els.syncState.textContent = "同期を送信しました";
         if (syncPending) {
           syncPending = false;
           queueRemoteSync("連続更新");
@@ -1925,7 +1956,7 @@
       let appliedRemoteData = false;
       if (!state.apiUrl) {
         if (!silent) alert("API URL を設定してください。");
-        return;
+        return false;
       }
       isRemoteLoading = true;
       renderMeta();
@@ -1953,6 +1984,7 @@
           appliedRemoteData = true;
           saveState();
           render();
+          return true;
         } else {
           throw new Error("invalid payload");
         }
@@ -1960,12 +1992,13 @@
         console.error("loadRemote failed", err);
         if (appliedRemoteData) {
           console.warn("remote data was applied, so suppressing load alert");
-          return;
+          return true;
         }
         els.syncState.textContent = auto ? "自動同期失敗" : "読み込み失敗";
         if (!silent) {
           log("読み込み失敗", "GAS からの取得に失敗しました。少し待って再読み込みしてください。");
         }
+        return false;
       } finally {
         isRemoteLoading = false;
         renderMeta();
