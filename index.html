@@ -1108,6 +1108,7 @@
     let lineIdToken = "";
     let editingOriginalName = "";
     let remoteActionSeq = 0;
+    let lastRemoteError = "";
     const els = {
       list: document.getElementById("inventoryList"),
       history: document.getElementById("historyList"),
@@ -1896,13 +1897,31 @@
       }, 500);
     }
 
-    function scheduleRemoteVerify(message, delay = 2500) {
+    function wait(ms) {
+      return new Promise((resolve) => setTimeout(resolve, ms));
+    }
+
+    async function verifyRemoteAfterSubmit(message) {
+      const delays = [1800, 2600, 3800];
+      for (let i = 0; i < delays.length; i++) {
+        await wait(delays[i]);
+        const verified = await loadRemote({ silent: true, auto: true });
+        if (verified) {
+          els.syncState.textContent = message;
+          return true;
+        }
+      }
+      const suffix = lastRemoteError ? `: ${lastRemoteError}` : "";
+      els.syncState.textContent = `反映確認に失敗しました${suffix}`;
+      return false;
+    }
+
+    function scheduleRemoteVerify(message) {
       const seq = ++remoteActionSeq;
       setTimeout(async () => {
         if (seq !== remoteActionSeq) return;
-        const verified = await loadRemote({ silent: true, auto: true });
-        els.syncState.textContent = verified ? message : "反映確認に失敗しました";
-      }, delay);
+        await verifyRemoteAfterSubmit(message);
+      }, 0);
     }
 
     function submitAdjustItem(name, delta, memo) {
@@ -1968,6 +1987,7 @@
         if (!silent) {
           els.syncState.textContent = "読み込み中...";
         }
+        lastRemoteError = "";
         const data = await loadRemoteJsonp("data");
         if (data && data.status === "error") {
           throw new Error(data.message || "remote auth error");
@@ -1990,6 +2010,7 @@
         }
       } catch (err) {
         console.error("loadRemote failed", err);
+        lastRemoteError = err && err.message ? err.message : "読み込みエラー";
         if (appliedRemoteData) {
           console.warn("remote data was applied, so suppressing load alert");
           return true;
