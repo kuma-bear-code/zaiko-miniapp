@@ -158,6 +158,27 @@ function doGet(e) {
       return jsonpOrJson_({ status: 'ok', categories: getCategoriesList(ss) }, params.callback);
     }
 
+    if (action === 'updateItem') {
+      const updateAuth = authorizeWebAppRequest_(params.idToken);
+      if (!updateAuth.ok) return jsonpOrJson_({ status: 'error', message: updateAuth.message }, params.callback);
+      const updated = updateInventoryItemFromParams_(ss, params);
+      return jsonpOrJson_({ status: 'ok', updated: updated, summary: buildSummary_(ss) }, params.callback);
+    }
+
+    if (action === 'adjustItem') {
+      const adjustAuth = authorizeWebAppRequest_(params.idToken);
+      if (!adjustAuth.ok) return jsonpOrJson_({ status: 'error', message: adjustAuth.message }, params.callback);
+      const updated = adjustInventoryItem_(ss, params.name, Number(params.delta || 0), params.memo || '');
+      return jsonpOrJson_({ status: 'ok', updated: updated, summary: buildSummary_(ss) }, params.callback);
+    }
+
+    if (action === 'deleteItem') {
+      const deleteAuth = authorizeWebAppRequest_(params.idToken);
+      if (!deleteAuth.ok) return jsonpOrJson_({ status: 'error', message: deleteAuth.message }, params.callback);
+      const deleted = deleteProduct(ss, params.name);
+      return jsonpOrJson_({ status: 'ok', deleted: deleted, summary: buildSummary_(ss) }, params.callback);
+    }
+
     if (action === 'ping') {
       return jsonpOrJson_({
         status: 'ok',
@@ -1059,6 +1080,27 @@ function upsertInventoryItem_(ss, input) {
     }
   }
   sh.appendRow([item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]);
+  return true;
+}
+
+function updateInventoryItemFromParams_(ss, params) {
+  const item = normalizeInventoryItem_(params);
+  const originalName = String(params.originalName || item.name || '').trim();
+  if (!item.name) return false;
+
+  const sh = ss.getSheetByName(SHEETS.inventory);
+  const v = sh.getDataRange().getValues();
+  const rowValues = [[item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]];
+
+  for (let i = 1; i < v.length; i++) {
+    const currentName = String(v[i][1] || '').trim();
+    if (currentName === originalName || currentName === item.name) {
+      sh.getRange(i + 1, 1, 1, INVENTORY_COLUMNS).setValues(rowValues);
+      return true;
+    }
+  }
+
+  sh.appendRow(rowValues[0]);
   return true;
 }
 

@@ -1107,7 +1107,6 @@
     let syncPending = false;
     let lineIdToken = "";
     let editingOriginalName = "";
-    let remoteActionSeq = 0;
     let lastRemoteError = "";
     const els = {
       list: document.getElementById("inventoryList"),
@@ -1852,86 +1851,57 @@
       log("品目削除", `${name} を削除しました`);
       saveState();
       render();
-      queueRemoteSync("削除");
+      submitDeleteItem(name);
     }
 
-    function ensureSyncFrame(id) {
-      let iframe = document.getElementById(id);
-      if (!iframe) {
-        iframe = document.createElement("iframe");
-        iframe.id = id;
-        iframe.name = id;
-        iframe.style.display = "none";
-        document.body.appendChild(iframe);
-      }
-      return iframe;
-    }
-
-    function submitFormToGas(action, payload, frameId) {
-      const iframe = ensureSyncFrame(frameId);
-      const form = document.createElement("form");
-      form.method = "POST";
-      form.action = state.apiUrl;
-      form.target = iframe.name;
-      form.style.display = "none";
-
-      const actionInput = document.createElement("input");
-      actionInput.name = "action";
-      actionInput.value = action;
-      form.appendChild(actionInput);
-
-      const idTokenInput = document.createElement("textarea");
-      idTokenInput.name = "idToken";
-      idTokenInput.value = lineIdToken;
-      form.appendChild(idTokenInput);
-
-      const payloadInput = document.createElement("textarea");
-      payloadInput.name = "payload";
-      payloadInput.value = JSON.stringify(payload || {});
-      form.appendChild(payloadInput);
-
-      document.body.appendChild(form);
-      form.submit();
-      setTimeout(() => {
-        if (document.body.contains(form)) document.body.removeChild(form);
-      }, 500);
-    }
-
-    function wait(ms) {
-      return new Promise((resolve) => setTimeout(resolve, ms));
-    }
-
-    async function verifyRemoteAfterSubmit(message) {
-      const delays = [1800, 2600, 3800];
-      for (let i = 0; i < delays.length; i++) {
-        await wait(delays[i]);
-        const verified = await loadRemote({ silent: true, auto: true });
-        if (verified) {
-          els.syncState.textContent = message;
-          return true;
-        }
-      }
-      const suffix = lastRemoteError ? `: ${lastRemoteError}` : "";
-      els.syncState.textContent = `反映確認に失敗しました${suffix}`;
-      return false;
-    }
-
-    function scheduleRemoteVerify(message) {
-      const seq = ++remoteActionSeq;
-      setTimeout(async () => {
-        if (seq !== remoteActionSeq) return;
-        await verifyRemoteAfterSubmit(message);
-      }, 0);
-    }
-
-    function submitAdjustItem(name, delta, memo) {
+    async function submitAdjustItem(name, delta, memo) {
       if (!state.apiUrl) {
         els.syncState.textContent = "API URL が未設定です";
         return;
       }
-      submitFormToGas("adjustItem", { name, delta, memo }, "inventory-adjust-frame");
-      els.syncState.textContent = "在庫調整を送信しました";
-      scheduleRemoteVerify("在庫調整を反映しました");
+      try {
+        els.syncState.textContent = "在庫調整を送信中...";
+        const data = await loadRemoteJsonp("adjustItem", { name, delta, memo });
+        if (data && data.status === "error") throw new Error(data.message || "adjustItem failed");
+        await loadRemote({ silent: true, auto: true });
+        els.syncState.textContent = "在庫調整を反映しました";
+      } catch (err) {
+        console.error("adjustItem failed", err);
+        lastRemoteError = err && err.message ? err.message : "在庫調整エラー";
+        els.syncState.textContent = `在庫調整に失敗しました: ${lastRemoteError}`;
+      }
+    }
+
+    async function submitDeleteItem(name) {
+      if (!state.apiUrl || !state.loadedFromRemote) return;
+      try {
+        els.syncState.textContent = "削除を送信中...";
+        const data = await loadRemoteJsonp("deleteItem", { name });
+        if (data && data.status === "error") throw new Error(data.message || "deleteItem failed");
+        await loadRemote({ silent: true, auto: true });
+        els.syncState.textContent = "削除を反映しました";
+      } catch (err) {
+        console.error("deleteItem failed", err);
+        lastRemoteError = err && err.message ? err.message : "削除エラー";
+        els.syncState.textContent = `削除の反映に失敗しました: ${lastRemoteError}`;
+      }
+    }
+
+    async function remoteUpdateItem(item, originalName = "") {
+      const payload = {
+        originalName,
+        category: item.category || "",
+        name: item.name || "",
+        stock: Number(item.stock) || 0,
+        minStock: Number(item.minStock) || 0,
+        unit: item.unit || "個",
+        photoUrl: item.photoUrl || "",
+        note: item.note || "",
+        location: item.location || ""
+      };
+      const data = await loadRemoteJsonp("updateItem", payload);
+      if (data && data.status === "error") throw new Error(data.message || "updateItem failed");
+      return data;
     }
 
     async function syncToRemote(reason = "手動同期") {
@@ -1943,25 +1913,24 @@
         syncPending = true;
         return;
       }
-      let submitted = false;
       try {
         syncInFlight = true;
         els.syncState.textContent = "同期中...";
-        submitFormToGas("saveInventory", {
-          items: state.items,
-          history: state.history
-        }, "inventory-sync-frame");
-        submitted = true;
+        for (const item of state.items) {
+          await remoteUpdateItem(item);
+        }
         syncPending = false;
+        await loadRemote({ silent: true, auto: true });
         state.lastRemoteLoadedAt = new Date().toISOString();
-        els.syncState.textContent = "同期を送信しました";
-        scheduleRemoteVerify(`同期を確認しました (${reason})`);
-      } catch {
-        alert("同期に失敗しました。GAS の URL と公開設定を確認してください。");
+        els.syncState.textContent = `同期を反映しました (${reason})`;
+      } catch (err) {
+        console.error("syncToRemote failed", err);
+        lastRemoteError = err && err.message ? err.message : "同期エラー";
+        els.syncState.textContent = `同期に失敗しました: ${lastRemoteError}`;
+        alert("同期に失敗しました。GAS の URL、公開設定、LINEログイン状態を確認してください。");
       } finally {
         syncInFlight = false;
         renderMeta();
-        if (submitted) els.syncState.textContent = "同期を送信しました";
         if (syncPending) {
           syncPending = false;
           queueRemoteSync("連続更新");
@@ -2032,9 +2001,10 @@
       }
     }
 
-    function loadRemoteJsonp(action) {
+    function loadRemoteJsonp(action, params = {}) {
       return new Promise((resolve, reject) => {
-        const callbackName = `inventoryRemote_${action}_${Date.now()}`;
+        const safeAction = String(action).replace(/[^a-zA-Z0-9_]/g, "_");
+        const callbackName = `inventoryRemote_${safeAction}_${Date.now()}_${Math.floor(Math.random() * 100000)}`;
         let finished = false;
         const cleanup = () => {
           delete window[callbackName];
@@ -2060,7 +2030,15 @@
         const script = document.createElement("script");
         script.id = callbackName;
         const joiner = state.apiUrl.includes("?") ? "&" : "?";
-        script.src = `${state.apiUrl}${joiner}action=${encodeURIComponent(action)}&callback=${encodeURIComponent(callbackName)}&idToken=${encodeURIComponent(lineIdToken)}`;
+        const query = new URLSearchParams({
+          action,
+          callback: callbackName,
+          idToken: lineIdToken || ""
+        });
+        Object.entries(params || {}).forEach(([key, value]) => {
+          query.set(key, value == null ? "" : String(value));
+        });
+        script.src = `${state.apiUrl}${joiner}${query.toString()}`;
         script.onerror = () => {
           if (finished) return;
           finished = true;
