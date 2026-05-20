@@ -130,6 +130,12 @@
     }
 
     .btn:hover { transform: translateY(-1px); }
+    .btn:disabled {
+      cursor: not-allowed;
+      opacity: 0.5;
+      transform: none;
+      box-shadow: none;
+    }
     .btn.primary { background: #fff; color: var(--green-dark); }
     .btn.success { background: var(--green); color: #fff; }
     .btn.ghost { background: rgba(255, 255, 255, 0.14); color: #fff; border-color: rgba(255, 255, 255, 0.22); box-shadow: none; }
@@ -819,6 +825,7 @@
         <div class="top-actions">
           <a class="btn ghost" href="./shopping.html">買い物リスト</a>
           <button class="btn add" id="btnOpenQuickAdd">＋追加</button>
+          <button class="btn ghost" id="btnUndo" type="button" disabled>取り消し</button>
           <button class="btn ghost" id="btnReload">再読み込み</button>
           <button class="btn ghost" id="btnExport">JSON出力</button>
           <button class="btn primary" id="btnSync">GASへ同期</button>
@@ -1086,6 +1093,7 @@
     const LOCAL_MODE_KEY = "inventory_console_local_mode_v1";
     const DEFAULT_API_URL = "https://script.google.com/macros/s/AKfycbx6IKSwS9-65CoZzNHUfhOgvCRB8F7YQPsikDtGJ_cw42Fay8hX2dOHTbaMR1-8riZ7/exec";
     const AUTO_REFRESH_INTERVAL_MS = 60 * 1000;
+    const UNDO_LIMIT = 10;
     // Enter your LIFF app ID here to turn on LINE login for the web app.
     const LIFF_ID = "2010110468-3HNQTQLt";
     const LINE_AUTH_ENABLED = Boolean(LIFF_ID);
@@ -1115,6 +1123,7 @@
       status: document.getElementById("statusFilter"),
       sort: document.getElementById("sortFilter"),
       categoryBar: document.getElementById("categoryBar"),
+      undo: document.getElementById("btnUndo"),
       apiInput: document.getElementById("apiInput"),
       forecast14Card: document.getElementById("forecast14Card"),
       forecast7Card: document.getElementById("forecast7Card"),
@@ -1216,6 +1225,7 @@
             history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
             categories: [],
             forecasts: [],
+            undoStack: [],
             summary: null,
             apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
             lastUpdated: new Date().toISOString(),
@@ -1232,6 +1242,7 @@
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           forecasts: normalizeForecasts(parsed.forecasts),
+          undoStack: Array.isArray(parsed.undoStack) ? parsed.undoStack.slice(0, UNDO_LIMIT) : [],
           summary: parsed.summary || null,
           apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: parsed.lastUpdated || new Date().toISOString(),
@@ -1248,6 +1259,7 @@
           history: [],
           categories: [],
           forecasts: [],
+          undoStack: [],
           summary: null,
           apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
           lastUpdated: new Date().toISOString(),
@@ -1296,6 +1308,72 @@
 
     function normalize(value) {
       return String(value || "").trim().toLowerCase();
+    }
+
+    function cloneItems(items) {
+      return JSON.parse(JSON.stringify(Array.isArray(items) ? items : []));
+    }
+
+    function pushUndo(label) {
+      state.undoStack = Array.isArray(state.undoStack) ? state.undoStack : [];
+      state.undoStack.unshift({
+        label,
+        time: new Date().toISOString(),
+        items: cloneItems(state.items),
+        forecasts: normalizeForecasts(state.forecasts),
+        categories: Array.isArray(state.categories) ? [...state.categories] : []
+      });
+      state.undoStack = state.undoStack.slice(0, UNDO_LIMIT);
+      updateUndoButton();
+    }
+
+    function updateUndoButton() {
+      if (!els.undo) return;
+      const stack = Array.isArray(state.undoStack) ? state.undoStack : [];
+      const next = stack[0];
+      els.undo.disabled = stack.length === 0;
+      els.undo.textContent = next ? `取り消し (${stack.length})` : "取り消し";
+      els.undo.title = next ? `${next.label} を戻します` : "戻せる操作はありません";
+    }
+
+    async function undoLastChange() {
+      state.undoStack = Array.isArray(state.undoStack) ? state.undoStack : [];
+      if (!state.undoStack.length) return;
+      const entry = state.undoStack.shift();
+      const beforeUndoItems = cloneItems(state.items);
+      state.items = cloneItems(entry.items);
+      state.forecasts = normalizeForecasts(entry.forecasts);
+      state.categories = Array.isArray(entry.categories) ? [...entry.categories] : state.categories;
+      log("取り消し", `${entry.label} を戻しました`);
+      refreshForecastsFromItems();
+      saveState();
+      render();
+      await syncUndoToRemote(state.items, beforeUndoItems);
+    }
+
+    async function syncUndoToRemote(targetItems, beforeUndoItems) {
+      if (!state.apiUrl || !state.loadedFromRemote) return;
+      try {
+        els.syncState.textContent = "取り消しを同期中...";
+        const targetNames = new Set(targetItems.map((item) => normalize(item.name)));
+        const namesToDelete = [...new Set(beforeUndoItems
+          .filter((item) => !targetNames.has(normalize(item.name)))
+          .map((item) => item.name)
+          .filter(Boolean))];
+        for (const name of namesToDelete) {
+          const data = await loadRemoteJsonp("deleteItem", { name });
+          if (data && data.status === "error") throw new Error(data.message || "deleteItem failed");
+        }
+        for (const item of targetItems) {
+          await remoteUpdateItem(item);
+        }
+        await loadRemote({ silent: true, auto: true });
+        els.syncState.textContent = "取り消しを同期しました";
+      } catch (err) {
+        console.error("undo sync failed", err);
+        lastRemoteError = err && err.message ? err.message : "取り消し同期エラー";
+        els.syncState.textContent = `取り消しの同期に失敗しました: ${lastRemoteError}`;
+      }
     }
 
     function getStatus(item) {
@@ -1615,6 +1693,7 @@
       const low = state.items.filter((item) => getStatus(item) === "low").length;
       const zero = state.items.filter((item) => getStatus(item) === "zero").length;
       const categories = allCategories().length;
+      updateUndoButton();
       els.kpiTotal.textContent = total;
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
@@ -1796,6 +1875,7 @@
         if (originalName && normalize(item.name) === normalize(originalName)) return true;
         return normalize(item.name) === normalize(data.name);
       });
+      pushUndo(existing ? `編集: ${existing.name}` : `追加: ${data.name}`);
       if (existing) {
         existing.category = data.category;
         existing.name = data.name;
@@ -1832,6 +1912,7 @@
         alert("対象品目が見つかりませんでした。");
         return;
       }
+      pushUndo(`在庫調整: ${item.name}`);
       item.stock = Math.max(0, Number(item.stock) + Number(delta));
       log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
       refreshForecastsFromItems();
@@ -1846,6 +1927,7 @@
 
     function deleteItem(name) {
       if (!confirm(`「${name}」を削除しますか？`)) return;
+      pushUndo(`削除: ${name}`);
       state.items = state.items.filter((row) => normalize(row.name) !== normalize(name));
       state.forecasts = (state.forecasts || []).filter((forecast) => normalize(forecast.name) !== normalize(name));
       log("品目削除", `${name} を削除しました`);
@@ -1966,6 +2048,7 @@
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
           state.forecasts = Array.isArray(data.forecasts) ? normalizeForecasts(data.forecasts) : [];
+          if (!silent && !auto) state.undoStack = [];
           if (data.summary) state.summary = data.summary;
           refreshForecastsFromHistory();
           state.loadedFromRemote = true;
@@ -2069,6 +2152,7 @@
         state.history = fresh.history;
         state.categories = fresh.categories || [];
         state.forecasts = normalizeForecasts(fresh.forecasts);
+        state.undoStack = Array.isArray(fresh.undoStack) ? fresh.undoStack : [];
         state.summary = fresh.summary || null;
         state.apiUrl = fresh.apiUrl;
         state.lastUpdated = fresh.lastUpdated;
@@ -2088,6 +2172,7 @@
 
       document.getElementById("btnExport").addEventListener("click", exportJson);
       document.getElementById("btnSync").addEventListener("click", syncToRemote);
+      els.undo.addEventListener("click", undoLastChange);
       document.getElementById("btnOpenQuickAdd").addEventListener("click", () => openQuickAdd());
       document.getElementById("fabAdd").addEventListener("click", () => openQuickAdd());
       document.getElementById("btnCloseQuickAdd").addEventListener("click", closeQuickAdd);
@@ -2114,6 +2199,11 @@
         if ((event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "k") {
           event.preventDefault();
           openQuickAdd();
+        }
+        const isTyping = ["INPUT", "TEXTAREA", "SELECT"].includes(event.target && event.target.tagName);
+        if (!isTyping && (event.ctrlKey || event.metaKey) && event.key.toLowerCase() === "z") {
+          event.preventDefault();
+          undoLastChange();
         }
       });
 
