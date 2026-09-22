@@ -287,7 +287,7 @@ function authorizeWebAppRequest_(idToken) {
     .filter(function(value) { return value; });
 
   if (!channelId || allowed.length === 0) {
-    return { ok: true, userId: '' };
+    return { ok: false, message: 'LINE login configuration required' };
   }
 
   if (!idToken) {
@@ -346,6 +346,9 @@ function respondJson_(obj) {
 
 function jsonpOrJson_(obj, callback) {
   if (callback) {
+    if (!/^[A-Za-z_$][\w$]*$/.test(callback)) {
+      return respondJson_({ status: 'error', message: 'Invalid callback.' });
+    }
     return ContentService
       .createTextOutput(callback + '(' + JSON.stringify(obj) + ');')
       .setMimeType(ContentService.MimeType.JAVASCRIPT);
@@ -356,16 +359,180 @@ function jsonpOrJson_(obj, callback) {
 function buildApiPayload_(ss) {
   const items = readInventoryItems_(ss);
   const settings = getInventorySettings_(ss);
+  migratePackSizesFromAnalysis_(ss);
   const forecasts = buildConsumptionForecasts_(ss, items, settings);
+  const anomalies = buildConsumptionAnomalies_(ss, settings);
+  let analysisSync = 'ok';
+  try {
+    syncForecastAnalysis_(ss, items, forecasts, anomalies);
+  } catch (err) {
+    console.error('analysis sync failed', err);
+    analysisSync = 'error';
+  }
   return {
     status: 'ok',
+    spreadsheetUrl: ss.getUrl(),
+    consumptionLogSheetId: ss.getSheetByName(SHEETS.log).getSheetId(),
     items: items,
     history: readHistory_(ss),
     summary: buildSummary_(ss, items),
     categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_),
     settings: settings,
-    forecasts: forecasts
+    forecasts: forecasts,
+    anomalies: anomalies,
+    analysisSync: analysisSync
   };
+}
+
+function migratePackSizesFromAnalysis_(ss) {
+  const analysis = ss.getSheetByName('商品分析');
+  const itemSettings = ss.getSheetByName(SHEETS.itemSettings);
+  if (!analysis || !itemSettings || analysis.getLastRow() < 2) return;
+  const known = getItemPackSizes_(ss);
+  const names = analysis.getRange(2, 2, analysis.getLastRow() - 1, 1).getValues();
+  const packs = analysis.getRange(2, 13, analysis.getLastRow() - 1, 1).getValues();
+  names.forEach(function(row, index) {
+    const name = String(row[0] || '').trim();
+    const pack = Number(packs[index][0]);
+    const key = normalizeKey_(name);
+    if (name && !known[key] && isFinite(pack) && pack > 1 && Math.floor(pack) === pack) {
+      itemSettings.appendRow([name, pack]);
+      known[key] = pack;
+    }
+  });
+}
+
+function syncForecastAnalysis_(ss, items, forecasts, anomalies) {
+  const analysis = ss.getSheetByName('商品分析');
+  if (analysis) {
+    const previousCount = Math.max(0, analysis.getLastRow() - 1);
+    if (items.length + 1 > analysis.getMaxRows()) {
+      analysis.insertRowsAfter(analysis.getMaxRows(), items.length + 1 - analysis.getMaxRows());
+    }
+    for (let i = previousCount; i < items.length; i++) {
+      const row = i + 2;
+      analysis.getRange(row, 1, 1, 5).setValues([[
+        '=Inventory!A' + row,
+        '=Inventory!B' + row,
+        '=Inventory!C' + row,
+        '=Inventory!D' + row,
+        '=Inventory!E' + row
+      ]]);
+      analysis.getRange(row, 6).setFormula('=IF(B' + row + '= "","",SUMIF(ConsumptionLog!A:A,B' + row + ',ConsumptionLog!C:C))');
+      analysis.getRange(row, 9).setFormula('=IFERROR(MAX(FILTER(ConsumptionLog!B:B,ConsumptionLog!A:A=B' + row + ')),"")');
+      analysis.getRange(row, 11).setFormula('=IF(B' + row + '= "","",IF(AND(C' + row + '>D' + row + '*3,C' + row + '-D' + row + '>=5),"過剰","適正"))');
+    }
+    const count = Math.max(previousCount, items.length);
+    if (count > 0) {
+    const names = analysis.getRange(2, 2, count, 1).getValues();
+    const byName = {};
+    forecasts.forEach(function(forecast) { byName[normalizeKey_(forecast.name)] = forecast; });
+    const paceAndDays = [];
+    const statuses = [];
+    const purchases = [];
+    names.forEach(function(row) {
+      const forecast = byName[normalizeKey_(row[0])];
+      paceAndDays.push(forecast ? [forecast.dailyConsumption * 30, forecast.daysLeft === null ? '' : forecast.daysLeft] : ['', '']);
+      statuses.push([forecast ? forecast.purchaseStatus : '']);
+      purchases.push(forecast
+        ? [forecast.targetStock, forecast.packSize, forecast.shortage, forecast.suggestedPurchase]
+        : ['', '', '', '']);
+    });
+    analysis.getRange(2, 7, count, 2).setValues(paceAndDays);
+    analysis.getRange(2, 10, count, 1).setValues(statuses);
+    analysis.getRange(2, 12, count, 4).setValues(purchases);
+    analysis.getRange(1, 13).setValue('入数（商品設定）');
+    }
+  }
+  const dashboard = ss.getSheetByName('Dashboard');
+  if (!dashboard) return;
+  if (dashboard.getRange(34, 1).getValue() === '消費速度の集計期間（日）') {
+    dashboard.getRange(34, 1, 4, 2).moveTo(dashboard.getRange(34, 8));
+  }
+  dashboard.getRange(6, 1, 2, 4).setValues([
+    ['今すぐ購入', '=COUNTIF(\'商品分析\'!J2:J,"今すぐ購入")', '現在庫が最低在庫未満', '早めに購入'],
+    ['次回購入', '=COUNTIF(\'商品分析\'!J2:J,"次回購入")', '次回買い物までに不足する見込み', '買い物リストへ']
+  ]);
+  dashboard.getRange(34, 8, 4, 2).setValues([
+    ['消費速度の集計期間（日）', ''],
+    ['設定はSettingsで変更', ''],
+    ['次回買い物までの日数', ''],
+    ['購入候補は左側に全件表示', '']
+  ]);
+  dashboard.getRange(34, 9).setFormula('=IFERROR(VLOOKUP("analysisDays",Settings!A:B,2,FALSE),180)');
+  dashboard.getRange(36, 9).setFormula('=IFERROR(VLOOKUP("purchaseHorizonDays",Settings!A:B,2,FALSE),30)');
+  dashboard.getRange(12, 1).setFormula('=IFERROR(SORT(FILTER({\'商品分析\'!B2:B,\'商品分析\'!C2:C,\'商品分析\'!D2:D,\'商品分析\'!L2:L,\'商品分析\'!O2:O,\'商品分析\'!E2:E},\'商品分析\'!O2:O>0),5,FALSE),"")');
+  const anomalySheet = ss.getSheetByName('異常候補');
+  const logSheet = ss.getSheetByName(SHEETS.log);
+  if (anomalySheet && logSheet && logSheet.getLastRow() >= 2) {
+    const count = Math.min(logSheet.getLastRow() - 1, anomalySheet.getMaxRows() - 1);
+    const byRow = {};
+    (anomalies || []).forEach(function(entry) { byRow[entry.row] = entry; });
+    const values = [];
+    for (let row = 2; row < count + 2; row++) {
+      const entry = byRow[row];
+      values.push(entry
+        ? [entry.duplicateCount, entry.typicalQuantity === null ? '' : entry.typicalQuantity, entry.reasons.join('・')]
+        : ['', '', '']);
+    }
+    anomalySheet.getRange(1, 5).setValue('通常数量（中央値）');
+    anomalySheet.getRange(2, 4, count, 3).setValues(values);
+  }
+}
+
+function refreshForecastAnalysis() {
+  const ss = getSpreadsheetOrThrow_();
+  ensureSheets_(ss);
+  migratePackSizesFromAnalysis_(ss);
+  const items = readInventoryItems_(ss);
+  const settings = getInventorySettings_(ss);
+  syncForecastAnalysis_(ss, items, buildConsumptionForecasts_(ss, items, settings), buildConsumptionAnomalies_(ss, settings));
+}
+
+function buildConsumptionAnomalies_(ss, settings) {
+  const sh = ss.getSheetByName(SHEETS.log);
+  if (!sh || sh.getLastRow() < 2) return [];
+  const rows = sh.getRange(2, 1, sh.getLastRow() - 1, 3).getValues();
+  const records = [];
+  const counts = {};
+  const byItem = {};
+  rows.forEach(function(row, index) {
+    const name = String(row[0] || '').trim();
+    const date = row[1] instanceof Date
+      ? Utilities.formatDate(row[1], Session.getScriptTimeZone(), 'yyyy-MM-dd')
+      : String(row[1] || '').trim().replace(/\//g, '-');
+    const quantity = Number(row[2]);
+    if (!name || !date || !isFinite(quantity) || quantity <= 0) return;
+    const itemKey = normalizeKey_(name);
+    const signature = JSON.stringify([itemKey, date, quantity]);
+    const record = { row: index + 2, name: name, date: date, quantity: quantity, signature: signature, itemKey: itemKey };
+    records.push(record);
+    counts[signature] = (counts[signature] || 0) + 1;
+    if (!byItem[itemKey]) byItem[itemKey] = [];
+    byItem[itemKey].push(record);
+  });
+  const multiplier = settings.anomalyMultiplier || INVENTORY_SETTING_DEFAULTS.anomalyMultiplier;
+  return records.map(function(record) {
+    const peers = byItem[record.itemKey].filter(function(other) {
+      return other.signature !== record.signature;
+    }).map(function(other) { return other.quantity; }).sort(function(a, b) { return a - b; });
+    const middle = Math.floor(peers.length / 2);
+    const median = peers.length % 2 ? peers[middle] : (peers[middle - 1] + peers[middle]) / 2;
+    const reasons = [];
+    if (counts[record.signature] > 1) reasons.push('完全一致の重複記録');
+    if (peers.length && record.quantity >= Math.max(5, median * multiplier)) {
+      reasons.push('数量が通常より大きい');
+    }
+    return reasons.length ? {
+      row: record.row,
+      name: record.name,
+      date: record.date,
+      quantity: record.quantity,
+      duplicateCount: counts[record.signature],
+      typicalQuantity: peers.length ? median : null,
+      reasons: reasons
+    } : null;
+  }).filter(function(record) { return record; });
 }
 
 function buildSummary_(ss, items) {
@@ -1068,6 +1235,15 @@ function readInventoryItems_(ss) {
 
 function saveInventoryItems_(ss, items) {
   const sh = ss.getSheetByName(SHEETS.inventory);
+  const existing = readInventoryItems_(ss);
+  const incomingNames = new Set((items || []).map(function(item) {
+    return normalizeKey_(item && (item.name || item['品目']));
+  }));
+  if (existing.length && existing.some(function(item) {
+    return !incomingNames.has(normalizeKey_(item.name));
+  })) {
+    throw new Error('saveInventory rejected: existing items must not be omitted.');
+  }
   const rows = [];
   (items || []).forEach(function(input) {
     const item = normalizeInventoryItem_(input);
@@ -1119,6 +1295,10 @@ function updateInventoryItemFromParams_(ss, params) {
   const originalName = String(params.originalName || item.name || '').trim();
   if (!item.name) return false;
 
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('Could not lock inventory.');
+  try {
+
   const sh = ss.getSheetByName(SHEETS.inventory);
   const v = sh.getDataRange().getValues();
   const rowValues = [[item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]];
@@ -1132,6 +1312,10 @@ function updateInventoryItemFromParams_(ss, params) {
   for (let i = 1; i < v.length; i++) {
     const currentName = String(v[i][1] || '').trim();
     if (currentName === originalName || currentName === item.name) {
+      if (params.expectedStock !== undefined && params.expectedStock !== '' &&
+          Number(v[i][2] || 0) !== Number(params.expectedStock)) {
+        throw new Error('Inventory changed in Sheets. Reload before editing.');
+      }
       sh.getRange(i + 1, 1, 1, INVENTORY_COLUMNS).setValues(rowValues);
       if (originalName !== item.name) {
         renameItemSettings_(ss, originalName, item.name);
@@ -1141,8 +1325,14 @@ function updateInventoryItemFromParams_(ss, params) {
     }
   }
 
+  if (params.expectedStock !== undefined && params.expectedStock !== '') {
+    throw new Error('Item changed or was deleted in Sheets. Reload before editing.');
+  }
   sh.appendRow(rowValues[0]);
   return true;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function renameConsumptionItem_(ss, oldName, newName) {
@@ -1172,6 +1362,10 @@ function renameItemSettings_(ss, oldName, newName) {
 }
 
 function adjustInventoryItem_(ss, name, delta, memo) {
+  if (!isFinite(delta) || !delta) throw new Error('Invalid inventory adjustment.');
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(5000)) throw new Error('Could not lock inventory.');
+  try {
   const sh = ss.getSheetByName(SHEETS.inventory);
   const v = sh.getDataRange().getValues();
   for (let i = 1; i < v.length; i++) {
@@ -1179,8 +1373,8 @@ function adjustInventoryItem_(ss, name, delta, memo) {
       const current = Number(v[i][2] || 0);
       const next = Math.max(0, current + Number(delta || 0));
       sh.getRange(i + 1, 3).setValue(next);
-      if (Number(delta || 0) < 0) {
-        logConsumption(ss, name, Math.abs(Number(delta || 0)));
+      if (delta < 0 && current > next) {
+        logConsumption(ss, name, current - next);
       }
       return true;
     }
@@ -1190,6 +1384,9 @@ function adjustInventoryItem_(ss, name, delta, memo) {
     return true;
   }
   return false;
+  } finally {
+    lock.releaseLock();
+  }
 }
 
 function bulkRestockItems_(ss, restocks) {
@@ -1362,7 +1559,9 @@ function buildConsumptionForecasts_(ss, items, settings) {
   }
 
   forecasts.sort(function(a, b) {
-    return a.daysLeft - b.daysLeft || String(a.name || '').localeCompare(String(b.name || ''), 'ja');
+    const daysA = a.daysLeft === null ? Infinity : a.daysLeft;
+    const daysB = b.daysLeft === null ? Infinity : b.daysLeft;
+    return daysA - daysB || String(a.name || '').localeCompare(String(b.name || ''), 'ja');
   });
   return forecasts;
 }
@@ -1422,22 +1621,21 @@ function addConsumptionRecord_(bucket, date, quantity) {
 }
 
 function buildConsumptionForecastForItem_(item, stats, now, settings, packSize) {
-  if (!item || !stats) return null;
+  if (!item) return null;
 
-  const choice = chooseConsumptionBucket_(stats, settings, now);
-  if (!choice || !(choice.bucket.quantity > 0) || !(choice.denominatorDays > 0)) return null;
-
-  const dailyConsumption = choice.bucket.quantity / choice.denominatorDays;
-  if (!(dailyConsumption > 0)) return null;
+  const choice = stats ? chooseConsumptionBucket_(stats, settings, now) : null;
+  const dailyConsumption = choice && choice.denominatorDays > 0
+    ? choice.bucket.quantity / choice.denominatorDays : 0;
 
   const stock = Number(item.stock || 0);
   const minStock = Number(item.minStock || 0);
   const available = Math.max(0, stock - minStock);
-  const daysLeft = available <= 0 ? 0 : Math.ceil(available / dailyConsumption);
+  const daysLeft = dailyConsumption > 0
+    ? (available <= 0 ? 0 : Math.ceil(available / dailyConsumption)) : null;
 
   const targetDate = new Date(now.getTime());
   targetDate.setHours(0, 0, 0, 0);
-  targetDate.setDate(targetDate.getDate() + daysLeft);
+  if (daysLeft !== null) targetDate.setDate(targetDate.getDate() + daysLeft);
 
   const targetStock = Math.max(
     minStock,
@@ -1455,19 +1653,20 @@ function buildConsumptionForecastForItem_(item, stats, now, settings, packSize) 
     unit: String(item.unit || '個'),
     stock: stock,
     minStock: minStock,
-    dailyConsumption: Math.round(dailyConsumption * 1000) / 1000,
-    daysPerUnit: Math.round((1 / dailyConsumption) * 10) / 10,
+    dailyConsumption: dailyConsumption,
+    daysPerUnit: dailyConsumption > 0 ? Math.round((1 / dailyConsumption) * 10) / 10 : null,
     daysLeft: daysLeft,
-    targetDate: Utilities.formatDate(targetDate, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-    sampleCount: choice.bucket.count,
-    totalConsumed: choice.bucket.quantity,
-    basis: choice.basis,
-    analysisDays: choice.denominatorDays,
+    targetDate: daysLeft !== null ? Utilities.formatDate(targetDate, Session.getScriptTimeZone(), 'yyyy-MM-dd') : '',
+    sampleCount: choice ? choice.bucket.count : (stats ? stats.all.count : 0),
+    totalConsumed: choice ? choice.bucket.quantity : 0,
+    basis: choice ? choice.basis : 'insufficient',
+    analysisDays: choice ? choice.denominatorDays : 0,
     purchaseHorizonDays: settings.purchaseHorizonDays,
     targetStock: targetStock,
     shortage: shortage,
     packSize: normalizedPackSize,
-    suggestedPurchase: suggestedPurchase
+    suggestedPurchase: suggestedPurchase,
+    purchaseStatus: stock < minStock ? '今すぐ購入' : (suggestedPurchase > 0 ? '次回購入' : '問題なし')
   };
 }
 
@@ -1554,7 +1753,7 @@ function readInventoryCategories_(items) {
   const categories = {};
   (items || []).forEach(function(item) {
     const category = String(item.category || '').trim();
-    if (category) categories[category] = true;
+    if (category && category !== '分類') categories[category] = true;
   });
   return Object.keys(categories);
 }
@@ -1566,23 +1765,25 @@ function syncCategories_(ss, items) {
   const categories = {};
   (items || []).forEach(function(item) {
     const category = String(item.category || '').trim();
-    if (category) categories[category] = true;
+    if (category && category !== '分類') categories[category] = true;
   });
   getCategoriesList(ss).forEach(function(category) {
-    if (category) categories[category] = true;
+    if (category && category !== '分類') categories[category] = true;
   });
 
   const list = Object.keys(categories).sort(function(a, b) {
     return a.localeCompare(b, 'ja');
   });
   if (sheet.getLastRow() > 0) {
-    sheet.getRange(1, 1, sheet.getLastRow(), Math.max(sheet.getLastColumn(), 1)).clearContent();
+    sheet.getRange(1, 1, sheet.getLastRow(), 1).clearContent();
   }
   if (!list.length) {
     sheet.getRange(1, 1).setValue('未分類');
     return;
   }
-  const rows = [['未分類']].concat(list.map(function(category) { return [category]; }));
+  const rows = [['未分類']].concat(list.filter(function(category) {
+    return category !== '未分類';
+  }).map(function(category) { return [category]; }));
   sheet.getRange(1, 1, rows.length, 1).setValues(rows);
 }
 
@@ -1593,7 +1794,7 @@ function getCategoriesList(ss) {
   const cats = [];
   for (let i = 0; i < v.length; i++) {
     const x = (v[i][0] || '').toString().trim();
-    if (x) cats.push(x);
+    if (x && x !== '分類' && cats.indexOf(x) === -1) cats.push(x);
   }
   return cats;
 }
@@ -1612,7 +1813,7 @@ function getUnclassifiedItems(ss) {
 
 function updateInventoryQuantitySafe(ss, itemName, operation, quantity) {
   const lock = LockService.getScriptLock();
-  lock.tryLock(5000);
+  if (!lock.tryLock(5000)) throw new Error('Could not lock inventory.');
   try {
     const sh = ss.getSheetByName(SHEETS.inventory);
     const v = sh.getDataRange().getValues();
@@ -1671,12 +1872,6 @@ function logConsumption(ss, name, qty) {
   const sh = getConsumptionLogSheet_(ss);
   const today = Utilities.formatDate(new Date(), Session.getScriptTimeZone(), 'yyyy-MM-dd');
   sh.appendRow([name, today, qty]);
-}
-
-function deleteConsumptionLogs(ss, name) {
-  const sh = getConsumptionLogSheet_(ss);
-  const v = sh.getDataRange().getValues();
-  for (let i = v.length - 1; i >= 1; i--) if (v[i][0] === name) sh.deleteRow(i + 1);
 }
 
 function getConsumptionRate(ss, name) {

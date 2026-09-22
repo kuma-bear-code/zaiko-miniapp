@@ -884,6 +884,12 @@
           </button>
         </div>
 
+        <details class="panel section" id="anomalyPanel" style="margin-bottom:14px;">
+          <summary id="anomalySummary">消費履歴の要確認候補</summary>
+          <p>候補を確認し、必要な場合だけ元のConsumptionLogを修正してください。自動修正は行いません。</p>
+          <div id="anomalyList"></div>
+        </details>
+
         <div class="section-head">
           <div>
             <h2>カテゴリボタン</h2>
@@ -1114,6 +1120,7 @@
     let syncInFlight = false;
     let syncPending = false;
     let remoteSnapshot = null;
+    let pendingRemoteWrites = 0;
     let lineIdToken = "";
     let editingOriginalName = "";
     let lastRemoteError = "";
@@ -1134,6 +1141,8 @@
       kpiCategories: document.getElementById("kpiCategories"),
       forecast14Text: document.getElementById("forecast14Text"),
       forecast7Text: document.getElementById("forecast7Text"),
+      anomalySummary: document.getElementById("anomalySummary"),
+      anomalyList: document.getElementById("anomalyList"),
       connectionPill: document.getElementById("connectionPill"),
       syncState: document.getElementById("syncState"),
       lastUpdatedPill: document.getElementById("lastUpdatedPill")
@@ -1226,6 +1235,9 @@
             history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
             categories: [],
             forecasts: [],
+            anomalies: [],
+            spreadsheetUrl: "",
+            consumptionLogSheetId: "",
             settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
             undoStack: [],
             summary: null,
@@ -1244,6 +1256,9 @@
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           forecasts: normalizeForecasts(parsed.forecasts),
+          anomalies: Array.isArray(parsed.anomalies) ? parsed.anomalies : [],
+          spreadsheetUrl: String(parsed.spreadsheetUrl || ""),
+          consumptionLogSheetId: String(parsed.consumptionLogSheetId || ""),
           settings: parsed.settings || { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           undoStack: Array.isArray(parsed.undoStack) ? parsed.undoStack.slice(0, UNDO_LIMIT) : [],
           summary: parsed.summary || null,
@@ -1262,6 +1277,9 @@
           history: [],
           categories: [],
           forecasts: [],
+          anomalies: [],
+          spreadsheetUrl: "",
+          consumptionLogSheetId: "",
           settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           undoStack: [],
           summary: null,
@@ -1347,12 +1365,13 @@
       if (!els.undo) return;
       const stack = Array.isArray(state.undoStack) ? state.undoStack : [];
       const next = stack[0];
-      els.undo.disabled = stack.length === 0;
+      els.undo.disabled = stack.length === 0 || pendingRemoteWrites > 0;
       els.undo.textContent = next ? `取り消し (${stack.length})` : "取り消し";
       els.undo.title = next ? `${next.label} を戻します` : "戻せる操作はありません";
     }
 
     async function undoLastChange() {
+      if (pendingRemoteWrites > 0) return;
       state.undoStack = Array.isArray(state.undoStack) ? state.undoStack : [];
       if (!state.undoStack.length) return;
       const entry = state.undoStack.shift();
@@ -1364,7 +1383,14 @@
       refreshForecastsFromItems();
       saveState();
       render();
-      await syncUndoToRemote(state.items, beforeUndoItems);
+      pendingRemoteWrites++;
+      updateUndoButton();
+      try {
+        await syncUndoToRemote(state.items, beforeUndoItems);
+      } finally {
+        pendingRemoteWrites--;
+        updateUndoButton();
+      }
     }
 
     async function syncUndoToRemote(targetItems, beforeUndoItems) {
@@ -1428,7 +1454,7 @@
       const daysPerUnit = Number.isFinite(daysPerUnitRaw) && daysPerUnitRaw > 0
         ? Number(daysPerUnitRaw.toFixed(1))
         : null;
-      const daysLeftRaw = Number.isFinite(Number(forecast.daysLeft))
+      const daysLeftRaw = forecast.daysLeft != null && Number.isFinite(Number(forecast.daysLeft))
         ? Number(forecast.daysLeft)
         : Number(forecast.daysToMin);
       const daysLeft = Number.isFinite(daysLeftRaw) ? Math.max(0, Math.ceil(daysLeftRaw)) : null;
@@ -1449,7 +1475,8 @@
         targetStock: Number(forecast.targetStock || 0),
         shortage: Number(forecast.shortage || 0),
         packSize: Number(forecast.packSize || 1),
-        suggestedPurchase: Number(forecast.suggestedPurchase || 0)
+        suggestedPurchase: Number(forecast.suggestedPurchase || 0),
+        purchaseStatus: String(forecast.purchaseStatus || "")
       };
     }
 
@@ -1712,9 +1739,26 @@
       renderMeta();
       renderModalCategoryChips();
       renderForecastSummary();
+      renderAnomalies();
       renderCategoryBar();
       renderInventory();
       renderHistory();
+    }
+
+    function renderAnomalies() {
+      const anomalies = Array.isArray(state.anomalies) ? state.anomalies : [];
+      els.anomalySummary.textContent = `消費履歴の要確認候補 (${anomalies.length}件)`;
+      els.anomalyList.innerHTML = anomalies.length
+        ? anomalies.map((row) => {
+            const link = /^https:\/\/docs\.google\.com\/spreadsheets\//.test(state.spreadsheetUrl) && state.consumptionLogSheetId
+              ? `${state.spreadsheetUrl}#gid=${encodeURIComponent(state.consumptionLogSheetId)}&range=A${encodeURIComponent(row.row)}:C${encodeURIComponent(row.row)}`
+              : "";
+            const location = link
+              ? `<a href="${escapeHtml(link)}" target="_blank" rel="noopener noreferrer">ConsumptionLog ${escapeHtml(row.row)}行を確認</a>`
+              : `ConsumptionLog ${escapeHtml(row.row)}行`;
+            return `<p>${escapeHtml(row.name)} / ${escapeHtml(row.date)} / ${escapeHtml(row.quantity)} / ${escapeHtml((row.reasons || []).join("・"))}（${location}）</p>`;
+          }).join("")
+        : "<p>現在、要確認候補はありません。</p>";
     }
 
     function renderMeta() {
@@ -1909,6 +1953,7 @@
         if (originalName && normalize(item.name) === normalize(originalName)) return true;
         return normalize(item.name) === normalize(data.name);
       });
+      const expectedStock = existing ? Number(existing.stock) : null;
       pushUndo(existing ? `編集: ${existing.name}` : `追加: ${data.name}`);
       if (existing) {
         existing.category = data.category;
@@ -1938,12 +1983,15 @@
       saveState();
       render();
       if (state.apiUrl && state.loadedFromRemote) {
-        remoteUpdateItem(existing || state.items[0], originalName)
+        pendingRemoteWrites++;
+        updateUndoButton();
+        remoteUpdateItem(existing || state.items[0], originalName, expectedStock)
           .then(() => loadRemote({ silent: true, auto: true }))
           .catch((err) => {
             lastRemoteError = err && err.message ? err.message : "品目同期エラー";
             els.syncState.textContent = `品目の同期に失敗しました: ${lastRemoteError}`;
-          });
+          })
+          .finally(() => { pendingRemoteWrites--; updateUndoButton(); });
       }
     }
 
@@ -1982,6 +2030,8 @@
         els.syncState.textContent = "API URL が未設定です";
         return;
       }
+      pendingRemoteWrites++;
+      updateUndoButton();
       try {
         els.syncState.textContent = "在庫調整を送信中...";
         const data = await loadRemoteJsonp("adjustItem", { name, delta, memo });
@@ -1992,11 +2042,16 @@
         console.error("adjustItem failed", err);
         lastRemoteError = err && err.message ? err.message : "在庫調整エラー";
         els.syncState.textContent = `在庫調整に失敗しました: ${lastRemoteError}`;
+      } finally {
+        pendingRemoteWrites--;
+        updateUndoButton();
       }
     }
 
     async function submitDeleteItem(name) {
       if (!state.apiUrl || !state.loadedFromRemote) return;
+      pendingRemoteWrites++;
+      updateUndoButton();
       try {
         els.syncState.textContent = "削除を送信中...";
         const data = await loadRemoteJsonp("deleteItem", { name });
@@ -2007,10 +2062,13 @@
         console.error("deleteItem failed", err);
         lastRemoteError = err && err.message ? err.message : "削除エラー";
         els.syncState.textContent = `削除の反映に失敗しました: ${lastRemoteError}`;
+      } finally {
+        pendingRemoteWrites--;
+        updateUndoButton();
       }
     }
 
-    async function remoteUpdateItem(item, originalName = "") {
+    async function remoteUpdateItem(item, originalName = "", expectedStock = null) {
       const payload = {
         originalName,
         category: item.category || "",
@@ -2022,6 +2080,7 @@
         note: item.note || "",
         location: item.location || ""
       };
+      if (expectedStock !== null) payload.expectedStock = expectedStock;
       const data = await loadRemoteJsonp("updateItem", payload);
       if (data && data.status === "error") throw new Error(data.message || "updateItem failed");
       return data;
@@ -2088,14 +2147,17 @@
         if (Array.isArray(data.items)) {
           state.items = data.items;
           remoteSnapshot = inventoryFingerprint(data.items);
+          state.loadedFromRemote = true;
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
           state.settings = data.settings || state.settings;
           state.forecasts = Array.isArray(data.forecasts) ? normalizeForecasts(data.forecasts) : [];
+          state.anomalies = Array.isArray(data.anomalies) ? data.anomalies : [];
+          state.spreadsheetUrl = String(data.spreadsheetUrl || "");
+          state.consumptionLogSheetId = String(data.consumptionLogSheetId || "");
           if (!silent && !auto) state.undoStack = [];
           if (data.summary) state.summary = data.summary;
           refreshForecastsFromHistory();
-          state.loadedFromRemote = true;
           state.lastRemoteLoadedAt = new Date().toISOString();
           appliedRemoteData = true;
           saveState();
