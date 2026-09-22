@@ -390,6 +390,7 @@
       items: [],
       forecasts: [],
       categories: [],
+      settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
       loadedFromRemote: false,
       lastUpdated: new Date().toISOString()
     };
@@ -484,11 +485,12 @@
           items: Array.isArray(parsed.items) ? parsed.items : [],
           forecasts: normalizeForecasts(parsed.forecasts),
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
+          settings: parsed.settings || { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           loadedFromRemote: Boolean(parsed.loadedFromRemote),
           lastUpdated: parsed.lastUpdated || new Date().toISOString()
         };
       } catch {
-        state = { items: [], forecasts: [], categories: [], loadedFromRemote: false, lastUpdated: new Date().toISOString() };
+        state = { items: [], forecasts: [], categories: [], settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 }, loadedFromRemote: false, lastUpdated: new Date().toISOString() };
       }
     }
 
@@ -502,6 +504,7 @@
         state.items = data.items;
         state.forecasts = normalizeForecasts(data.forecasts);
         state.categories = Array.isArray(data.categories) ? data.categories : [];
+        state.settings = data.settings || state.settings;
         state.loadedFromRemote = true;
         state.lastUpdated = new Date().toISOString();
         localStorage.setItem(STORAGE_KEY, JSON.stringify({
@@ -509,6 +512,7 @@
           items: state.items,
           forecasts: state.forecasts,
           categories: state.categories,
+          settings: state.settings,
           loadedFromRemote: true,
           lastUpdated: state.lastUpdated
         }));
@@ -602,6 +606,7 @@
         items: state.items,
         forecasts: state.forecasts,
         categories: state.categories,
+        settings: state.settings,
         loadedFromRemote: state.loadedFromRemote,
         lastUpdated: state.lastUpdated
       }));
@@ -663,7 +668,14 @@
             daysPerUnit: Number.isFinite(daysPerUnit) ? daysPerUnit : null,
             targetDate: String(forecast.targetDate || forecast.nextPurchaseDate || ""),
             basis: String(forecast.basis || ""),
-            sampleCount: Number(forecast.sampleCount || 0)
+            sampleCount: Number(forecast.sampleCount || 0),
+            basis: String(forecast.basis || ""),
+            analysisDays: Number(forecast.analysisDays || 0),
+            purchaseHorizonDays: Number(forecast.purchaseHorizonDays || 0),
+            targetStock: Number(forecast.targetStock || 0),
+            shortage: Number(forecast.shortage || 0),
+            packSize: Number(forecast.packSize || 1),
+            suggestedPurchase: Number(forecast.suggestedPurchase || 0)
           };
         })
         .filter(Boolean)
@@ -696,10 +708,14 @@
         const daysLeft = forecast && Number.isFinite(forecast.daysLeft) ? forecast.daysLeft : null;
         const zero = stock <= 0;
         const low = stock < minStock;
+        const horizonDays = Math.max(1, Number(state.settings && state.settings.purchaseHorizonDays || 30));
         const urgent = daysLeft !== null && daysLeft <= 7;
-        const soon = daysLeft !== null && daysLeft <= 14;
+        const soon = daysLeft !== null && daysLeft <= horizonDays;
         if (!zero && !low && !soon) return null;
-        const suggested = Math.max(shortage, minStock || 1, 1);
+        const forecastSuggested = forecast ? Number(forecast.suggestedPurchase || 0) : 0;
+        const suggested = forecastSuggested > 0
+          ? forecastSuggested
+          : Math.max(shortage, minStock || 1, 1);
         return {
           id: normalize(item.name),
           name: item.name,
@@ -765,8 +781,12 @@
           ? `残り${row.forecast.daysLeft}日`
           : "予測なし";
         const forecastTone = row.urgent ? "danger" : (row.soon ? "warn" : "blue");
-        const basis = row.forecast && row.forecast.basis === "recent90" ? "直近90日" : (row.forecast ? "全期間" : "");
-        const reason = row.zero ? "在庫切れ" : (row.low ? "低在庫" : "切れそう");
+        const basis = row.forecast
+          ? (row.forecast.basis === "all"
+              ? "全期間"
+              : (row.forecast.analysisDays > 0 ? `直近${row.forecast.analysisDays}日` : row.forecast.basis))
+          : "";
+        const reason = row.zero ? "在庫切れ" : (row.low ? "低在庫" : "次回買い物候補");
         return `
           <article class="item ${row.done ? "done" : ""}">
             <input class="check" type="checkbox" data-done="${escapeHtml(row.id)}" ${row.done ? "checked" : ""} />
