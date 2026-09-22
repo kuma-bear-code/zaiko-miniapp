@@ -875,7 +875,7 @@
 
         <div class="forecast-summary" id="forecastSummary">
           <button class="forecast-card warn" id="forecast14Card" type="button" data-forecast-filter="forecast14">
-            <strong>2週間以内に切れそう</strong>
+            <strong>次回買い物までに不足しそう</strong>
             <span id="forecast14Text">消費ログを集計すると表示されます。</span>
           </button>
           <button class="forecast-card danger" id="forecast7Card" type="button" data-forecast-filter="forecast7">
@@ -905,7 +905,7 @@
             <option value="">全ステータス</option>
             <option value="low">低在庫のみ</option>
             <option value="zero">在庫切れのみ</option>
-            <option value="forecast14">2週間以内に切れそう</option>
+            <option value="forecast14">次回買い物までに不足しそう</option>
             <option value="forecast7">1週間以内に切れそう</option>
           </select>
           <select class="select" id="sortFilter">
@@ -1225,6 +1225,7 @@
             history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
             categories: [],
             forecasts: [],
+            settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
             undoStack: [],
             summary: null,
             apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
@@ -1242,6 +1243,7 @@
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           forecasts: normalizeForecasts(parsed.forecasts),
+          settings: parsed.settings || { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           undoStack: Array.isArray(parsed.undoStack) ? parsed.undoStack.slice(0, UNDO_LIMIT) : [],
           summary: parsed.summary || null,
           apiUrl: localMode ? "" : (parsed.apiUrl || localStorage.getItem(API_KEY) || DEFAULT_API_URL),
@@ -1259,6 +1261,7 @@
           history: [],
           categories: [],
           forecasts: [],
+          settings: { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           undoStack: [],
           summary: null,
           apiUrl: localMode ? "" : (localStorage.getItem(API_KEY) || DEFAULT_API_URL),
@@ -1425,7 +1428,14 @@
         daysPerUnit,
         daysLeft,
         targetDate,
-        sampleCount: Number(forecast.sampleCount || 0)
+        sampleCount: Number(forecast.sampleCount || 0),
+        basis: String(forecast.basis || ""),
+        analysisDays: Number(forecast.analysisDays || 0),
+        purchaseHorizonDays: Number(forecast.purchaseHorizonDays || 0),
+        targetStock: Number(forecast.targetStock || 0),
+        shortage: Number(forecast.shortage || 0),
+        packSize: Number(forecast.packSize || 1),
+        suggestedPurchase: Number(forecast.suggestedPurchase || 0)
       };
     }
 
@@ -1649,7 +1659,7 @@
         const matchesStatus =
           !statusFilter ||
           getStatus(item) === statusFilter ||
-          (statusFilter === "forecast14" && forecast && Number.isFinite(forecast.daysLeft) && forecast.daysLeft <= 14) ||
+          (statusFilter === "forecast14" && forecast && Number.isFinite(forecast.daysLeft) && forecast.daysLeft <= getPurchaseHorizonDays()) ||
           (statusFilter === "forecast7" && forecast && Number.isFinite(forecast.daysLeft) && forecast.daysLeft <= 7);
         const matchesCategory = categoryFilter === "all" || item.category === categoryFilter;
         return matchesQuery && matchesStatus && matchesCategory;
@@ -1705,17 +1715,22 @@
       document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
     }
 
+    function getPurchaseHorizonDays() {
+      return Math.max(1, Number(state.settings && state.settings.purchaseHorizonDays || 30));
+    }
+
     function renderForecastSummary() {
       const forecasts = Array.isArray(state.forecasts)
         ? state.forecasts.filter((forecast) => Number.isFinite(forecast.daysLeft))
         : [];
-      const within14 = forecasts.filter((forecast) => forecast.daysLeft <= 14);
+      const horizonDays = getPurchaseHorizonDays();
+      const within14 = forecasts.filter((forecast) => forecast.daysLeft <= horizonDays);
       const within7 = forecasts.filter((forecast) => forecast.daysLeft <= 7);
       els.forecast14Card.classList.toggle("active", els.status.value === "forecast14");
       els.forecast7Card.classList.toggle("active", els.status.value === "forecast7");
 
       if (!within14.length) {
-        els.forecast14Text.textContent = "今のところ、2週間以内に切れそうな品目はありません。";
+        els.forecast14Text.textContent = `今のところ、${horizonDays}日以内に不足しそうな品目はありません。`;
       } else {
         const names = within14.slice(0, 3).map((forecast) => `${forecast.name}(${forecast.daysLeft}日)`);
         els.forecast14Text.textContent = `${within14.length}件: ${names.join(" / ")}`;
@@ -2047,6 +2062,7 @@
           state.items = data.items;
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
+          state.settings = data.settings || state.settings;
           state.forecasts = Array.isArray(data.forecasts) ? normalizeForecasts(data.forecasts) : [];
           if (!silent && !auto) state.undoStack = [];
           if (data.summary) state.summary = data.summary;
