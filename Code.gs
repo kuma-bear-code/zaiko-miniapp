@@ -483,6 +483,10 @@ function syncForecastAnalysis_(ss, items, forecasts, anomalies) {
 function refreshForecastAnalysis() {
   const ss = getSpreadsheetOrThrow_();
   ensureSheets_(ss);
+  refreshForecastAnalysisForSpreadsheet_(ss);
+}
+
+function refreshForecastAnalysisForSpreadsheet_(ss) {
   migratePackSizesFromAnalysis_(ss);
   const items = readInventoryItems_(ss);
   const settings = getInventorySettings_(ss);
@@ -576,6 +580,11 @@ function handleLineWebhook_(body, ss) {
       if (ev.replyToken) safeReply(ev.replyToken, 'エラー: ' + shortErr_(innerErr));
     }
   });
+  try {
+    refreshForecastAnalysisForSpreadsheet_(ss);
+  } catch (err) {
+    console.error('LINE analysis sync failed', err);
+  }
   return respondJson_({ status: 'ok' });
 }
 
