@@ -517,14 +517,17 @@
           lastUpdated: state.lastUpdated
         }));
         els.syncState.textContent = "GAS読込済み";
+        render();
+        return true;
       } catch (err) {
         console.error("shopping load failed", err);
         els.syncState.textContent = state.items.length ? "前回データを表示中" : "読み込み失敗";
       }
       render();
+      return false;
     }
 
-    function restockDoneItems(mode) {
+    async function restockDoneItems(mode) {
       const checkedRows = getAllShoppingItems().filter((row) => row.done);
       if (!checkedRows.length) {
         els.syncState.textContent = "チェック済みの品目がありません";
@@ -544,12 +547,27 @@
       const label = mode === "one" ? "+1入庫" : "目安数で入庫";
       if (!confirm(`${restocks.length}件を${label}します。よろしいですか？`)) return;
 
+      const expected = new Map(restocks.map((row) => {
+        const item = state.items.find((candidate) => normalize(candidate.name) === normalize(row.name));
+        return [normalize(row.name), Number(item && item.stock || 0) + row.quantity];
+      }));
       submitBulkRestock(restocks, label);
-      applyRestockLocally(restocks);
-      clearDoneFor(restocks.map((row) => row.name));
-      els.syncState.textContent = `${label}を送信しました`;
-      render();
-      setTimeout(loadRemote, 1400);
+      els.syncState.textContent = `${label}を確認中...`;
+      for (let attempt = 0; attempt < 4; attempt++) {
+        await new Promise((resolve) => setTimeout(resolve, 1500));
+        if (!await loadRemote()) continue;
+        const verified = [...expected].every(([key, quantity]) => {
+          const item = state.items.find((candidate) => normalize(candidate.name) === key);
+          return item && Number(item.stock) === quantity;
+        });
+        if (verified) {
+          clearDoneFor(restocks.map((row) => row.name));
+          els.syncState.textContent = `${label}をSheetsで確認しました`;
+          render();
+          return;
+        }
+      }
+      els.syncState.textContent = "入庫を確認できませんでした。Sheetsの値を確認してください";
     }
 
     function submitBulkRestock(restocks, label) {

@@ -1113,6 +1113,7 @@
     let syncTimer = null;
     let syncInFlight = false;
     let syncPending = false;
+    let remoteSnapshot = null;
     let lineIdToken = "";
     let editingOriginalName = "";
     let lastRemoteError = "";
@@ -1317,6 +1318,18 @@
       return JSON.parse(JSON.stringify(Array.isArray(items) ? items : []));
     }
 
+    function inventoryFingerprint(items) {
+      return JSON.stringify(cloneItems(items).sort((a, b) => normalize(a.name).localeCompare(normalize(b.name))));
+    }
+
+    async function assertRemoteUnchanged() {
+      const fresh = await loadRemoteJsonp("data");
+      if (!fresh || fresh.status !== "ok" || !Array.isArray(fresh.items) ||
+          remoteSnapshot === null || inventoryFingerprint(fresh.items) !== remoteSnapshot) {
+        throw new Error("Sheets側に新しい変更があります。再読み込みしてから操作してください");
+      }
+    }
+
     function pushUndo(label) {
       state.undoStack = Array.isArray(state.undoStack) ? state.undoStack : [];
       state.undoStack.unshift({
@@ -1358,6 +1371,7 @@
       if (!state.apiUrl || !state.loadedFromRemote) return;
       try {
         els.syncState.textContent = "取り消しを同期中...";
+        await assertRemoteUnchanged();
         const targetNames = new Set(targetItems.map((item) => normalize(item.name)));
         const namesToDelete = [...new Set(beforeUndoItems
           .filter((item) => !targetNames.has(normalize(item.name)))
@@ -1518,6 +1532,10 @@
     }
 
     function refreshForecastsFromHistory() {
+      if (state.loadedFromRemote && !state.localMode) {
+        state.forecasts = normalizeForecasts(state.forecasts);
+        return;
+      }
       const localForecasts = buildForecastsFromHistory();
       const hasRemoteForecasts = Array.isArray(state.forecasts) && state.forecasts.length > 0;
       if (hasRemoteForecasts) {
@@ -1559,6 +1577,7 @@
     }
 
     function refreshForecastsFromItems() {
+      if (state.loadedFromRemote && !state.localMode) return;
       if (!Array.isArray(state.forecasts) || !state.forecasts.length) return;
       const today = new Date();
       today.setHours(0, 0, 0, 0);
@@ -1918,7 +1937,14 @@
       refreshForecastsFromItems();
       saveState();
       render();
-      queueRemoteSync("追加");
+      if (state.apiUrl && state.loadedFromRemote) {
+        remoteUpdateItem(existing || state.items[0], originalName)
+          .then(() => loadRemote({ silent: true, auto: true }))
+          .catch((err) => {
+            lastRemoteError = err && err.message ? err.message : "品目同期エラー";
+            els.syncState.textContent = `品目の同期に失敗しました: ${lastRemoteError}`;
+          });
+      }
     }
 
     function adjustStock(name, delta, label) {
@@ -2013,6 +2039,7 @@
       try {
         syncInFlight = true;
         els.syncState.textContent = "同期中...";
+        await assertRemoteUnchanged();
         for (const item of state.items) {
           await remoteUpdateItem(item);
         }
@@ -2060,6 +2087,7 @@
         }
         if (Array.isArray(data.items)) {
           state.items = data.items;
+          remoteSnapshot = inventoryFingerprint(data.items);
           if (Array.isArray(data.history)) state.history = data.history;
           if (Array.isArray(data.categories)) state.categories = data.categories;
           state.settings = data.settings || state.settings;

@@ -1123,16 +1123,52 @@ function updateInventoryItemFromParams_(ss, params) {
   const v = sh.getDataRange().getValues();
   const rowValues = [[item.category, item.name, item.stock, item.minStock, item.unit, item.photoUrl, item.note, item.location]];
 
+  if (originalName !== item.name && v.slice(1).some(function(row) {
+    return String(row[1] || '').trim() === item.name;
+  })) {
+    throw new Error('An item with the new name already exists.');
+  }
+
   for (let i = 1; i < v.length; i++) {
     const currentName = String(v[i][1] || '').trim();
     if (currentName === originalName || currentName === item.name) {
       sh.getRange(i + 1, 1, 1, INVENTORY_COLUMNS).setValues(rowValues);
+      if (originalName !== item.name) {
+        renameItemSettings_(ss, originalName, item.name);
+        renameConsumptionItem_(ss, originalName, item.name);
+      }
       return true;
     }
   }
 
   sh.appendRow(rowValues[0]);
   return true;
+}
+
+function renameConsumptionItem_(ss, oldName, newName) {
+  const sh = ss.getSheetByName(SHEETS.log);
+  if (!sh || sh.getLastRow() < 2) return;
+  const range = sh.getRange(2, 1, sh.getLastRow() - 1, 1);
+  const values = range.getValues();
+  let changed = false;
+  values.forEach(function(row) {
+    if (String(row[0] || '').trim() === oldName) {
+      row[0] = newName;
+      changed = true;
+    }
+  });
+  if (changed) range.setValues(values);
+}
+
+function renameItemSettings_(ss, oldName, newName) {
+  const sh = ss.getSheetByName(SHEETS.itemSettings);
+  if (!sh || sh.getLastRow() < 2) return;
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, 1).getValues();
+  for (let i = 0; i < values.length; i++) {
+    if (normalizeKey_(values[i][0]) === normalizeKey_(oldName)) {
+      sh.getRange(i + 2, 1).setValue(newName);
+    }
+  }
 }
 
 function adjustInventoryItem_(ss, name, delta, memo) {
@@ -1349,8 +1385,8 @@ function readConsumptionStats_(ss, settings) {
     const name = String(values[i][0] || '').trim();
     const dateValue = values[i][1];
     const date = dateValue instanceof Date ? dateValue : new Date(String(dateValue || ''));
-    const quantity = Math.abs(Number(values[i][2] || 0));
-    if (!name || isNaN(date.getTime()) || !(quantity > 0)) continue;
+    const quantity = Number(values[i][2] || 0);
+    if (!name || isNaN(date.getTime()) || date > now || !(quantity > 0)) continue;
 
     const key = normalizeKey_(name);
     if (!stats[key]) {
@@ -1408,7 +1444,7 @@ function buildConsumptionForecastForItem_(item, stats, now, settings, packSize) 
     Math.ceil(minStock + dailyConsumption * settings.purchaseHorizonDays)
   );
   const shortage = Math.max(0, targetStock - stock);
-  const normalizedPackSize = Math.max(1, Number(packSize || 1));
+  const normalizedPackSize = Math.max(1, Math.floor(Number(packSize || 1)));
   const suggestedPurchase = shortage > 0
     ? Math.ceil(shortage / normalizedPackSize) * normalizedPackSize
     : 0;
@@ -1504,7 +1540,7 @@ function getItemPackSizes_(ss) {
   values.forEach(function(row) {
     const name = String(row[0] || '').trim();
     const packSize = Number(row[1]);
-    if (!name || !isFinite(packSize) || packSize <= 0) return;
+    if (!name || !isFinite(packSize) || packSize < 1 || Math.floor(packSize) !== packSize) return;
     out[normalizeKey_(name)] = packSize;
   });
   return out;
@@ -1611,7 +1647,8 @@ function deleteProduct(ss, name) {
   for (let i = 1; i < v.length; i++) {
     if (v[i][1] === name) {
       sh.deleteRow(i + 1);
-      deleteConsumptionLogs(ss, name);
+      // ConsumptionLog is the historical source of truth. Keep it even when
+      // an item is removed; a later undo or re-add can use the same history.
       return true;
     }
   }
