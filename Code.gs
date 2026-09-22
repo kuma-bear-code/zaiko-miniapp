@@ -36,9 +36,19 @@ const COLS = { product: 7, stock: 3, min: 3, unit: 2, buttons: 11 };
 const SHEETS = {
   inventory: 'Inventory',
   categories: 'Categories',
-  log: 'ConsumptionLog'
+  log: 'ConsumptionLog',
+  settings: 'Settings',
+  itemSettings: '商品設定'
 };
 const INVENTORY_COLUMNS = 8;
+
+const INVENTORY_SETTING_DEFAULTS = {
+  analysisDays: 180,
+  fallbackAnalysisDays: 365,
+  purchaseHorizonDays: 30,
+  minSamples: 2,
+  anomalyMultiplier: 4
+};
 
 const STATE = {
   awaitingOperation: 'awaitingOperation',
@@ -244,6 +254,25 @@ function ensureSheets_(ss) {
     log = ss.insertSheet(SHEETS.log);
     log.appendRow(['品目', '日付', '数量']);
   }
+
+  let settings = ss.getSheetByName(SHEETS.settings);
+  if (!settings) {
+    settings = ss.insertSheet(SHEETS.settings);
+    settings.getRange(1, 1, 6, 3).setValues([
+      ['設定キー', '値', '説明'],
+      ['analysisDays', INVENTORY_SETTING_DEFAULTS.analysisDays, '通常の消費分析期間（日）'],
+      ['fallbackAnalysisDays', INVENTORY_SETTING_DEFAULTS.fallbackAnalysisDays, 'データ不足時の分析期間（日）'],
+      ['purchaseHorizonDays', INVENTORY_SETTING_DEFAULTS.purchaseHorizonDays, '次回買い物までの日数'],
+      ['minSamples', INVENTORY_SETTING_DEFAULTS.minSamples, '予測に必要な最低消費記録数'],
+      ['anomalyMultiplier', INVENTORY_SETTING_DEFAULTS.anomalyMultiplier, '異常数量判定の倍率']
+    ]);
+  }
+
+  let itemSettings = ss.getSheetByName(SHEETS.itemSettings);
+  if (!itemSettings) {
+    itemSettings = ss.insertSheet(SHEETS.itemSettings);
+    itemSettings.getRange(1, 1, 1, 2).setValues([['品目名', '入数']]);
+  }
 }
 
 // =======================================================
@@ -326,13 +355,15 @@ function jsonpOrJson_(obj, callback) {
 
 function buildApiPayload_(ss) {
   const items = readInventoryItems_(ss);
-  const forecasts = buildConsumptionForecasts_(ss, items);
+  const settings = getInventorySettings_(ss);
+  const forecasts = buildConsumptionForecasts_(ss, items, settings);
   return {
     status: 'ok',
     items: items,
     history: readHistory_(ss),
     summary: buildSummary_(ss, items),
     categories: getCategoriesList(ss).concat(readInventoryCategories_(items)).filter(uniqueOnly_),
+    settings: settings,
     forecasts: forecasts
   };
 }
@@ -1277,33 +1308,42 @@ function readHistory_(ss) {
   return history.reverse();
 }
 
-function buildConsumptionForecasts_(ss, items) {
-  const statsByName = readConsumptionStats_(ss);
+function buildConsumptionForecasts_(ss, items, settings) {
+  settings = settings || getInventorySettings_(ss);
+  const statsByName = readConsumptionStats_(ss, settings);
+  const packSizes = getItemPackSizes_(ss);
   const now = new Date();
   const forecasts = [];
+
   for (let i = 0; i < items.length; i++) {
     const item = items[i];
     const name = String(item.name || '').trim();
-    const stats = statsByName[normalizeKey_(name)];
-    const forecast = buildConsumptionForecastForItem_(item, stats, now);
+    const key = normalizeKey_(name);
+    const stats = statsByName[key];
+    const packSize = packSizes[key] || 1;
+    const forecast = buildConsumptionForecastForItem_(item, stats, now, settings, packSize);
     if (forecast) forecasts.push(forecast);
   }
+
   forecasts.sort(function(a, b) {
     return a.daysLeft - b.daysLeft || String(a.name || '').localeCompare(String(b.name || ''), 'ja');
   });
   return forecasts;
 }
 
-function readConsumptionStats_(ss) {
+function readConsumptionStats_(ss, settings) {
   const sh = ss.getSheetByName(SHEETS.log);
   const stats = {};
   if (!sh) return stats;
+
   const lastRow = sh.getLastRow();
   if (lastRow < 2) return stats;
 
   const values = sh.getRange(2, 1, lastRow - 1, 3).getValues();
   const now = new Date();
-  const recentStart = new Date(now.getTime() - 90 * 24 * 60 * 60 * 1000);
+  const dayMs = 24 * 60 * 60 * 1000;
+  const primaryStart = new Date(now.getTime() - settings.analysisDays * dayMs);
+  const fallbackStart = new Date(now.getTime() - settings.fallbackAnalysisDays * dayMs);
 
   for (let i = 0; i < values.length; i++) {
     const name = String(values[i][0] || '').trim();
@@ -1317,11 +1357,14 @@ function readConsumptionStats_(ss) {
       stats[key] = {
         name: name,
         all: emptyConsumptionBucket_(),
-        recent: emptyConsumptionBucket_()
+        primary: emptyConsumptionBucket_(),
+        fallback: emptyConsumptionBucket_()
       };
     }
+
     addConsumptionRecord_(stats[key].all, date, quantity);
-    if (date >= recentStart) addConsumptionRecord_(stats[key].recent, date, quantity);
+    if (date >= fallbackStart) addConsumptionRecord_(stats[key].fallback, date, quantity);
+    if (date >= primaryStart) addConsumptionRecord_(stats[key].primary, date, quantity);
   }
   return stats;
 }
@@ -1342,22 +1385,33 @@ function addConsumptionRecord_(bucket, date, quantity) {
   if (!bucket.lastDate || date > bucket.lastDate) bucket.lastDate = date;
 }
 
-function buildConsumptionForecastForItem_(item, stats, now) {
+function buildConsumptionForecastForItem_(item, stats, now, settings, packSize) {
   if (!item || !stats) return null;
-  const bucket = chooseConsumptionBucket_(stats);
-  if (!bucket || bucket.count < 2 || !(bucket.quantity > 0)) return null;
 
-  const spanDays = Math.max(1, Math.round((bucket.lastDate - bucket.firstDate) / (1000 * 60 * 60 * 24)));
-  const daysPerUnit = spanDays / bucket.quantity;
-  if (!(daysPerUnit > 0)) return null;
+  const choice = chooseConsumptionBucket_(stats, settings, now);
+  if (!choice || !(choice.bucket.quantity > 0) || !(choice.denominatorDays > 0)) return null;
+
+  const dailyConsumption = choice.bucket.quantity / choice.denominatorDays;
+  if (!(dailyConsumption > 0)) return null;
 
   const stock = Number(item.stock || 0);
   const minStock = Number(item.minStock || 0);
   const available = Math.max(0, stock - minStock);
-  const daysLeft = available <= 0 ? 0 : Math.ceil(available * daysPerUnit);
+  const daysLeft = available <= 0 ? 0 : Math.ceil(available / dailyConsumption);
+
   const targetDate = new Date(now.getTime());
   targetDate.setHours(0, 0, 0, 0);
   targetDate.setDate(targetDate.getDate() + daysLeft);
+
+  const targetStock = Math.max(
+    minStock,
+    Math.ceil(minStock + dailyConsumption * settings.purchaseHorizonDays)
+  );
+  const shortage = Math.max(0, targetStock - stock);
+  const normalizedPackSize = Math.max(1, Number(packSize || 1));
+  const suggestedPurchase = shortage > 0
+    ? Math.ceil(shortage / normalizedPackSize) * normalizedPackSize
+    : 0;
 
   return {
     name: String(item.name || ''),
@@ -1365,23 +1419,95 @@ function buildConsumptionForecastForItem_(item, stats, now) {
     unit: String(item.unit || '個'),
     stock: stock,
     minStock: minStock,
-    daysPerUnit: Math.round(daysPerUnit * 10) / 10,
+    dailyConsumption: Math.round(dailyConsumption * 1000) / 1000,
+    daysPerUnit: Math.round((1 / dailyConsumption) * 10) / 10,
     daysLeft: daysLeft,
     targetDate: Utilities.formatDate(targetDate, Session.getScriptTimeZone(), 'yyyy-MM-dd'),
-    sampleCount: bucket.count,
-    totalConsumed: bucket.quantity,
-    basis: bucket === stats.recent ? 'recent90' : 'all'
+    sampleCount: choice.bucket.count,
+    totalConsumed: choice.bucket.quantity,
+    basis: choice.basis,
+    analysisDays: choice.denominatorDays,
+    purchaseHorizonDays: settings.purchaseHorizonDays,
+    targetStock: targetStock,
+    shortage: shortage,
+    packSize: normalizedPackSize,
+    suggestedPurchase: suggestedPurchase
   };
 }
 
-function chooseConsumptionBucket_(stats) {
-  if (stats.recent && stats.recent.count >= 2 && stats.recent.quantity > 0) {
-    return stats.recent;
+function chooseConsumptionBucket_(stats, settings, now) {
+  const minSamples = Math.max(1, Number(settings.minSamples || 1));
+
+  if (stats.primary && stats.primary.count >= minSamples && stats.primary.quantity > 0) {
+    return {
+      bucket: stats.primary,
+      basis: 'recent' + settings.analysisDays,
+      denominatorDays: settings.analysisDays
+    };
   }
-  if (stats.all && stats.all.count >= 2 && stats.all.quantity > 0) {
-    return stats.all;
+
+  if (stats.fallback && stats.fallback.count >= minSamples && stats.fallback.quantity > 0) {
+    return {
+      bucket: stats.fallback,
+      basis: 'recent' + settings.fallbackAnalysisDays,
+      denominatorDays: settings.fallbackAnalysisDays
+    };
   }
+
+  if (stats.all && stats.all.count >= minSamples && stats.all.quantity > 0 && stats.all.firstDate) {
+    const dayMs = 24 * 60 * 60 * 1000;
+    const ageDays = Math.max(1, Math.ceil((now - stats.all.firstDate) / dayMs));
+    return {
+      bucket: stats.all,
+      basis: 'all',
+      denominatorDays: ageDays
+    };
+  }
+
   return null;
+}
+
+function getInventorySettings_(ss) {
+  const settings = {
+    analysisDays: INVENTORY_SETTING_DEFAULTS.analysisDays,
+    fallbackAnalysisDays: INVENTORY_SETTING_DEFAULTS.fallbackAnalysisDays,
+    purchaseHorizonDays: INVENTORY_SETTING_DEFAULTS.purchaseHorizonDays,
+    minSamples: INVENTORY_SETTING_DEFAULTS.minSamples,
+    anomalyMultiplier: INVENTORY_SETTING_DEFAULTS.anomalyMultiplier
+  };
+
+  const sh = ss.getSheetByName(SHEETS.settings);
+  if (!sh || sh.getLastRow() < 2) return settings;
+
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  values.forEach(function(row) {
+    const key = String(row[0] || '').trim();
+    const value = Number(row[1]);
+    if (!key || !Object.prototype.hasOwnProperty.call(settings, key) || !isFinite(value) || value <= 0) return;
+    settings[key] = value;
+  });
+
+  settings.analysisDays = Math.max(1, Math.round(settings.analysisDays));
+  settings.fallbackAnalysisDays = Math.max(settings.analysisDays, Math.round(settings.fallbackAnalysisDays));
+  settings.purchaseHorizonDays = Math.max(1, Math.round(settings.purchaseHorizonDays));
+  settings.minSamples = Math.max(1, Math.round(settings.minSamples));
+  settings.anomalyMultiplier = Math.max(1, settings.anomalyMultiplier);
+  return settings;
+}
+
+function getItemPackSizes_(ss) {
+  const out = {};
+  const sh = ss.getSheetByName(SHEETS.itemSettings);
+  if (!sh || sh.getLastRow() < 2) return out;
+
+  const values = sh.getRange(2, 1, sh.getLastRow() - 1, 2).getValues();
+  values.forEach(function(row) {
+    const name = String(row[0] || '').trim();
+    const packSize = Number(row[1]);
+    if (!name || !isFinite(packSize) || packSize <= 0) return;
+    out[normalizeKey_(name)] = packSize;
+  });
+  return out;
 }
 
 function normalizeKey_(value) {
