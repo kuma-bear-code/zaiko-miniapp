@@ -38,9 +38,12 @@ const SHEETS = {
   categories: 'Categories',
   log: 'ConsumptionLog',
   settings: 'Settings',
-  itemSettings: '商品設定'
+  itemSettings: '商品設定',
+  lineDigest: 'LINE配信'
 };
 const INVENTORY_COLUMNS = 8;
+const LINE_DIGEST_HEADERS = ['対象日', '配信文', '配信状態', '配信日時', 'エラー'];
+const LINE_DIGEST_TIMEZONE = 'Asia/Tokyo';
 
 const INVENTORY_SETTING_DEFAULTS = {
   analysisDays: 180,
@@ -281,6 +284,23 @@ function ensureSheets_(ss) {
     itemSettings = ss.insertSheet(SHEETS.itemSettings);
     itemSettings.getRange(1, 1, 1, 2).setValues([['品目名', '入数']]);
   }
+
+  ensureLineDigestSheet_(ss);
+}
+
+function ensureLineDigestSheet_(ss) {
+  let digest = ss.getSheetByName(SHEETS.lineDigest);
+  if (!digest) digest = ss.insertSheet(SHEETS.lineDigest);
+  if (digest.getLastRow() === 0) {
+    digest.getRange(1, 1, 1, LINE_DIGEST_HEADERS.length).setValues([LINE_DIGEST_HEADERS]);
+    return digest;
+  }
+
+  const header = digest.getRange(1, 1, 1, LINE_DIGEST_HEADERS.length).getValues()[0];
+  if (LINE_DIGEST_HEADERS.some(function(value, index) { return String(header[index] || '') !== value; })) {
+    throw new Error('LINE配信 sheet has an unexpected header; existing data was left unchanged.');
+  }
+  return digest;
 }
 
 // =======================================================
@@ -1918,6 +1938,116 @@ function getConsumptionRate(ss, name) {
 function isShort(stock, minInv) {
   if (minInv === '' || minInv == null || isNaN(minInv)) return false;
   return Number(stock) <= Number(minInv);
+}
+
+function setupDailyLineDigestTrigger() {
+  const ss = SpreadsheetApp.openById(CONF().SPREADSHEET_ID);
+  ensureLineDigestSheet_(ss);
+  const existing = ScriptApp.getProjectTriggers().map(function(trigger) {
+    return trigger.getHandlerFunction();
+  });
+  if (existing.indexOf('refreshDailyLineDigestSource') === -1) {
+    ScriptApp.newTrigger('refreshDailyLineDigestSource')
+      .timeBased()
+      .everyDays(1)
+      .atHour(5)
+      .inTimezone(LINE_DIGEST_TIMEZONE)
+      .create();
+  }
+  if (existing.indexOf('sendPendingLineDigest') === -1) {
+    ScriptApp.newTrigger('sendPendingLineDigest')
+      .timeBased()
+      .everyDays(1)
+      .atHour(7)
+      .inTimezone(LINE_DIGEST_TIMEZONE)
+      .create();
+  }
+  return 'Daily forecast refresh and LINE digest triggers are configured for 5:00 and 7:00 Asia/Tokyo.';
+}
+
+function refreshDailyLineDigestSource() {
+  const conf = CONF();
+  const ss = SpreadsheetApp.openById(conf.SPREADSHEET_ID);
+  ensureSheets_(ss);
+  return refreshForecastAnalysisForSpreadsheet_(ss);
+}
+
+function sendPendingLineDigest() {
+  const lock = LockService.getScriptLock();
+  if (!lock.tryLock(10000)) return { status: 'busy' };
+
+  try {
+    const conf = CONF();
+    const ss = SpreadsheetApp.openById(conf.SPREADSHEET_ID);
+    const digest = ensureLineDigestSheet_(ss);
+    const lastRow = digest.getLastRow();
+    if (lastRow < 2) return { status: 'empty' };
+
+    const yesterday = getYesterdayDigestDate_();
+    const values = digest.getRange(2, 1, lastRow - 1, LINE_DIGEST_HEADERS.length).getValues();
+    let rowNumber = -1;
+    let row = null;
+    for (let index = 0; index < values.length; index++) {
+      if (formatDigestDate_(values[index][0]) === yesterday) {
+        rowNumber = index + 2;
+        row = values[index];
+        break;
+      }
+    }
+    if (!row) return { status: 'no-digest', date: yesterday };
+    if (String(row[2] || '').trim() !== '未送信') {
+      return { status: 'skipped', date: yesterday, deliveryStatus: String(row[2] || '') };
+    }
+
+    const message = String(row[1] || '').trim();
+    if (!message) return setDigestDeliveryFailure_(digest, rowNumber, '配信文が空です。');
+    if (message.length > 5000) return setDigestDeliveryFailure_(digest, rowNumber, '配信文がLINEの文字数上限を超えています。');
+    if (!conf.CHANNEL_ACCESS_TOKEN || !conf.GROUP_ID) {
+      return setDigestDeliveryFailure_(digest, rowNumber, 'CHANNEL_ACCESS_TOKEN または GROUP_ID が未設定です。');
+    }
+
+    digest.getRange(rowNumber, 3).setValue('配信中');
+    digest.getRange(rowNumber, 5).setValue('');
+    try {
+      const response = postJson_('https://api.line.me/v2/bot/message/push', {
+        to: conf.GROUP_ID,
+        messages: [{ type: 'text', text: message }]
+      });
+      const code = response.getResponseCode();
+      if (code < 200 || code >= 300) {
+        const detail = String(response.getContentText() || '').slice(0, 500);
+        return setDigestDeliveryFailure_(digest, rowNumber, 'LINE API ' + code + ': ' + detail);
+      }
+
+      digest.getRange(rowNumber, 3).setValue('配信済み');
+      digest.getRange(rowNumber, 4).setValue(Utilities.formatDate(new Date(), LINE_DIGEST_TIMEZONE, 'yyyy-MM-dd HH:mm:ss'));
+      digest.getRange(rowNumber, 5).setValue('');
+      return { status: 'sent', date: yesterday };
+    } catch (error) {
+      return setDigestDeliveryFailure_(digest, rowNumber, shortErr_(error));
+    }
+  } finally {
+    lock.releaseLock();
+  }
+}
+
+function setDigestDeliveryFailure_(digest, rowNumber, detail) {
+  digest.getRange(rowNumber, 3).setValue('配信失敗');
+  digest.getRange(rowNumber, 5).setValue(String(detail || '不明なエラー').slice(0, 1000));
+  return { status: 'failed', row: rowNumber, error: String(detail || '不明なエラー') };
+}
+
+function getYesterdayDigestDate_() {
+  const today = Utilities.formatDate(new Date(), LINE_DIGEST_TIMEZONE, 'yyyy-MM-dd').split('-');
+  const date = new Date(Date.UTC(Number(today[0]), Number(today[1]) - 1, Number(today[2]) - 1));
+  return Utilities.formatDate(date, 'UTC', 'yyyy-MM-dd');
+}
+
+function formatDigestDate_(value) {
+  if (value instanceof Date && !isNaN(value.getTime())) {
+    return Utilities.formatDate(value, LINE_DIGEST_TIMEZONE, 'yyyy-MM-dd');
+  }
+  return String(value || '').trim().slice(0, 10);
 }
 
 function notifyLowInventory() {

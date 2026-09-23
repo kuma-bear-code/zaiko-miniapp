@@ -183,6 +183,63 @@ assert.equal(shoppingRows.find((row) => row.name === 'empty').purchaseStatus, '�
 shoppingContext.filter = 'next';
 assert.equal(shoppingContext.getShoppingItems().length, 1);
 
+assert.equal(context.formatDigestDate_('2026-09-22'), '2026-09-22');
+const originalDate = context.Date;
+const originalSpreadsheetApp = context.SpreadsheetApp;
+const originalPropertiesService = context.PropertiesService;
+const originalUrlFetchApp = context.UrlFetchApp;
+context.Date = class FixedDate extends Date {
+  constructor(value) {
+    if (arguments.length === 0) super('2026-09-23T00:15:00.000Z');
+    else super(value);
+  }
+  static UTC(...args) { return Date.UTC(...args); }
+};
+const digest = sheet([
+  ['対象日', '配信文', '配信状態', '配信日時', 'エラー'],
+  ['2026-09-22', '昨日の利用記録と買い物候補です。', '未送信', '', '']
+]);
+const digestSs = { getSheetByName: (name) => name === 'LINE配信' ? digest : null };
+context.SpreadsheetApp = { openById: () => digestSs };
+context.PropertiesService = { getScriptProperties: () => ({
+  getProperty: (name) => ({
+    SPREADSHEET_ID: 'spreadsheet-id',
+    CHANNEL_ACCESS_TOKEN: 'test-token',
+    GROUP_ID: 'test-group'
+  })[name] || null
+}) };
+let pushCount = 0;
+context.UrlFetchApp = { fetch: (url, options) => {
+  assert.equal(url, 'https://api.line.me/v2/bot/message/push');
+  assert.equal(options.headers.Authorization, 'Bearer test-token');
+  const payload = JSON.parse(options.payload);
+  assert.equal(payload.to, 'test-group');
+  assert.equal(payload.messages[0].text, '昨日の利用記録と買い物候補です。');
+  pushCount++;
+  return { getResponseCode: () => 200, getContentText: () => '' };
+} };
+assert.deepEqual(JSON.parse(JSON.stringify(context.sendPendingLineDigest())), { status: 'sent', date: '2026-09-22' });
+assert.equal(digest.rows[1][2], '配信済み');
+assert.equal(digest.rows[1][3], '2026-09-23');
+assert.equal(pushCount, 1);
+assert.equal(context.sendPendingLineDigest().status, 'skipped');
+assert.equal(pushCount, 1);
+digest.rows[1][2] = '未送信';
+context.UrlFetchApp = { fetch: () => {
+  pushCount++;
+  return { getResponseCode: () => 500, getContentText: () => '{"message":"rejected"}' };
+} };
+const failedDigest = context.sendPendingLineDigest();
+assert.equal(failedDigest.status, 'failed');
+assert.equal(digest.rows[1][2], '配信失敗');
+assert.match(digest.rows[1][4], /LINE API 500/);
+assert.equal(context.sendPendingLineDigest().status, 'skipped');
+assert.equal(pushCount, 2);
+context.Date = originalDate;
+context.SpreadsheetApp = originalSpreadsheetApp;
+context.PropertiesService = originalPropertiesService;
+context.UrlFetchApp = originalUrlFetchApp;
+
 for (const file of ['index.html', 'shopping.html']) {
   const html = fs.readFileSync(file, 'utf8');
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((match) => match[1]).filter(Boolean);
