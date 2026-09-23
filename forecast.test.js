@@ -115,6 +115,23 @@ assert.equal(analysis.rows[1][14], 12);
 assert.equal(analysis.rows[1][9], '今すぐ購入');
 assert.match(dashboard.rows[11][0], /商品分析/);
 
+const purchaseInventory = sheet([
+  ['分類', '品目', '在庫', '最低在庫', '単位', '写真URL', 'メモ', '保管場所'],
+  ['日用品', 'soap', 2, 1, '個', '', '', '洗面所']
+]);
+const purchaseLog = sheet([
+  ['品目', '日付', '数量'],
+  ['soap', new Date('2026-08-01T00:00:00Z'), 15],
+  ['soap', new Date('2026-09-01T00:00:00Z'), 15]
+]);
+const purchasePacks = sheet([['品目名', '入数'], ['soap', 12]]);
+const purchaseSs = {
+  getSheetByName: (name) => ({ Inventory: purchaseInventory, ConsumptionLog: purchaseLog, 商品設定: purchasePacks }[name])
+};
+const shortageMessage = context.getShortageListByCategory(purchaseSs);
+assert.match(shortageMessage, /次回購入/);
+assert.match(shortageMessage, /購入目安 12 個/);
+
 for (const file of ['index.html', 'shopping.html']) {
   const html = fs.readFileSync(file, 'utf8');
   const scripts = [...html.matchAll(/<script(?:\s[^>]*)?>([\s\S]*?)<\/script>/g)].map((match) => match[1]).filter(Boolean);

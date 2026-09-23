@@ -112,27 +112,32 @@ function doPost(e) {
       const items = Array.isArray(body.items) ? body.items : [];
       saveInventoryItems_(ss, items);
       syncCategories_(ss, items);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'inventory saved', summary: buildSummary_(ss) });
     }
 
     if (action === 'addItem') {
       upsertInventoryItem_(ss, body.item || body);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'item saved', summary: buildSummary_(ss) });
     }
 
     if (action === 'adjustItem') {
       adjustInventoryItem_(ss, body.name, Number(body.delta || 0), body.memo || '');
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'item adjusted', summary: buildSummary_(ss) });
     }
 
     if (action === 'bulkRestock') {
       const restocks = Array.isArray(body.restocks) ? body.restocks : [];
       const result = bulkRestockItems_(ss, restocks);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'items restocked', updated: result.updated, summary: buildSummary_(ss) });
     }
 
     if (action === 'deleteItem') {
       deleteProduct(ss, body.name);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'item deleted', summary: buildSummary_(ss) });
     }
 
@@ -172,6 +177,7 @@ function doGet(e) {
       const updateAuth = authorizeWebAppRequest_(params.idToken);
       if (!updateAuth.ok) return jsonpOrJson_({ status: 'error', message: updateAuth.message }, params.callback);
       const updated = updateInventoryItemFromParams_(ss, params);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return jsonpOrJson_({ status: 'ok', updated: updated, summary: buildSummary_(ss) }, params.callback);
     }
 
@@ -179,6 +185,7 @@ function doGet(e) {
       const adjustAuth = authorizeWebAppRequest_(params.idToken);
       if (!adjustAuth.ok) return jsonpOrJson_({ status: 'error', message: adjustAuth.message }, params.callback);
       const updated = adjustInventoryItem_(ss, params.name, Number(params.delta || 0), params.memo || '');
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return jsonpOrJson_({ status: 'ok', updated: updated, summary: buildSummary_(ss) }, params.callback);
     }
 
@@ -186,6 +193,7 @@ function doGet(e) {
       const deleteAuth = authorizeWebAppRequest_(params.idToken);
       if (!deleteAuth.ok) return jsonpOrJson_({ status: 'error', message: deleteAuth.message }, params.callback);
       const deleted = deleteProduct(ss, params.name);
+      refreshForecastAnalysisForSpreadsheet_(ss);
       return jsonpOrJson_({ status: 'ok', deleted: deleted, summary: buildSummary_(ss) }, params.callback);
     }
 
@@ -489,6 +497,7 @@ function refreshForecastAnalysis() {
 function refreshForecastAnalysisForSpreadsheet_(ss) {
   migratePackSizesFromAnalysis_(ss);
   const items = readInventoryItems_(ss);
+  syncCategories_(ss, items);
   const settings = getInventorySettings_(ss);
   syncForecastAnalysis_(ss, items, buildConsumptionForecasts_(ss, items, settings), buildConsumptionAnomalies_(ss, settings));
 }
@@ -1913,53 +1922,56 @@ function notifyLowInventory() {
   const conf = CONF();
   const ss = SpreadsheetApp.openById(conf.SPREADSHEET_ID);
   ensureSheets_(ss);
-  const sh = ss.getSheetByName(SHEETS.inventory);
-  const v = sh.getDataRange().getValues();
+  const items = readInventoryItems_(ss);
+  const settings = getInventorySettings_(ss);
+  const candidates = buildPurchaseCandidates_(ss, items, settings);
   const grouped = {};
-  for (let i = 1; i < v.length; i++) {
-    const cat = v[i][0] || '未分類';
-    const product = v[i][1];
-    const stock = Number(v[i][2]) || 0;
-    const minInv = v[i][3];
-    const u = defaultUnit(v[i][4]);
-    if (isShort(stock, minInv)) {
-      const shortage = Math.max(0, Number(minInv) - stock);
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(product + '：在庫 ' + stock + ' ' + u + ' / 最低 ' + minInv + ' ' + u + ' (不足: ' + shortage + ' ' + u + ')');
-    }
-  }
+  candidates.forEach(function(candidate) {
+    const forecast = candidate.forecast;
+    const cat = forecast.category || '未分類';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(
+      forecast.name + '：' + forecast.purchaseStatus +
+      ' / 在庫 ' + forecast.stock + ' ' + forecast.unit +
+      ' / 購入目安 ' + forecast.suggestedPurchase + ' ' + forecast.unit
+    );
+  });
   let msg = '';
   Object.keys(grouped).forEach(function(cat) {
     msg += '【' + cat + '】\n' + grouped[cat].join('\n') + '\n';
   });
   if (msg && conf.GROUP_ID) {
-    msg = '【在庫アラート】\n以下の品目の在庫が最低管理在庫以下です。\n' + msg.trim();
+    msg = '【在庫アラート】\n次回の買い物までに購入が必要な品目です。\n' + msg.trim();
     postJson_('https://api.line.me/v2/bot/message/push', { to: conf.GROUP_ID, messages: [{ type: 'text', text: msg }] });
   }
 }
 
 function getShortageListByCategory(ss) {
-  const sh = ss.getSheetByName(SHEETS.inventory);
-  const v = sh.getDataRange().getValues();
+  const items = readInventoryItems_(ss);
+  const settings = getInventorySettings_(ss);
+  const candidates = buildPurchaseCandidates_(ss, items, settings);
   const grouped = {};
-  for (let i = 1; i < v.length; i++) {
-    const cat = v[i][0] || '未分類';
-    const product = v[i][1];
-    const stock = Number(v[i][2]) || 0;
-    const minInv = v[i][3];
-    const u = defaultUnit(v[i][4]);
-    if (isShort(stock, minInv)) {
-      const shortage = Math.max(0, Number(minInv) - stock);
-      if (!grouped[cat]) grouped[cat] = [];
-      grouped[cat].push(product + '：不足 ' + shortage + ' ' + u);
-    }
-  }
+  candidates.forEach(function(candidate) {
+    const forecast = candidate.forecast;
+    const cat = forecast.category || '未分類';
+    if (!grouped[cat]) grouped[cat] = [];
+    grouped[cat].push(
+      forecast.name + '：' + forecast.purchaseStatus +
+      ' / 購入目安 ' + forecast.suggestedPurchase + ' ' + forecast.unit
+    );
+  });
   if (Object.keys(grouped).length === 0) return '不足情報はありません。';
   let msg = '【不足一覧】\n';
   Object.keys(grouped).forEach(function(cat) {
     msg += '【' + cat + '】\n' + grouped[cat].join('\n') + '\n';
   });
   return msg.trim();
+}
+
+function buildPurchaseCandidates_(ss, items, settings) {
+  return buildConsumptionForecasts_(ss, items || readInventoryItems_(ss), settings || getInventorySettings_(ss))
+    .filter(function(forecast) { return forecast.suggestedPurchase > 0; })
+    .map(function(forecast) { return { forecast: forecast }; });
 }
 
 // =======================================================

@@ -1585,7 +1585,7 @@
       if (!forecast) return "muted";
       if (!Number.isFinite(forecast.daysLeft)) return "muted";
       if (forecast.daysLeft <= 7) return "danger";
-      if (forecast.daysLeft <= 14) return "warn";
+      if (forecast.daysLeft <= getPurchaseHorizonDays()) return "warn";
       return "ok";
     }
 
