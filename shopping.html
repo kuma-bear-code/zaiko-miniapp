@@ -494,8 +494,8 @@
       try {
         const parsed = JSON.parse(localStorage.getItem(STORAGE_KEY) || "{}");
         state = {
-          items: Array.isArray(parsed.items) ? parsed.items : [],
-          forecasts: normalizeForecasts(parsed.forecasts),
+          items: parsed.loadedFromRemote && Array.isArray(parsed.items) ? parsed.items : [],
+          forecasts: parsed.loadedFromRemote ? normalizeForecasts(parsed.forecasts) : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           settings: parsed.settings || { analysisDays: 180, fallbackAnalysisDays: 365, purchaseHorizonDays: 30, minSamples: 2 },
           loadedFromRemote: Boolean(parsed.loadedFromRemote),
@@ -528,7 +528,7 @@
           loadedFromRemote: true,
           lastUpdated: state.lastUpdated
         }));
-        els.syncState.textContent = "GAS読込済み";
+        els.syncState.textContent = "在庫データを更新しました";
         render();
         return true;
       } catch (err) {
@@ -801,7 +801,10 @@
       els.lastUpdated.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
 
       if (!rows.length) {
-        els.list.innerHTML = `<div class="empty">今の条件では買い物候補はありません。</div>`;
+        const message = !state.loadedFromRemote
+          ? "在庫データを読み込んでいます。読み込みが終わらない場合は、再読み込みをお試しください。"
+          : "今の条件では買い物候補はありません。";
+        els.list.innerHTML = `<div class="empty">${message}</div>`;
         return;
       }
 

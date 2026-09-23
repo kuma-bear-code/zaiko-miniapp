@@ -1229,8 +1229,8 @@
         const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
         if (!raw) {
           return {
-            items: structuredClone(sampleInventory),
-            history: [{ title: "初期データを読み込みました", detail: localMode ? "ローカルモードで起動" : "標準同期で起動", time: new Date().toISOString() }],
+            items: localMode ? structuredClone(sampleInventory) : [],
+            history: localMode ? [{ title: "お試しデータを読み込みました", detail: "ローカルモードで起動", time: new Date().toISOString() }] : [],
             categories: [],
             forecasts: [],
             anomalies: [],
@@ -1250,7 +1250,9 @@
         }
         const parsed = JSON.parse(raw);
         return {
-          items: Array.isArray(parsed.items) && parsed.items.length ? parsed.items : structuredClone(sampleInventory),
+          items: Array.isArray(parsed.items) && (localMode || parsed.loadedFromRemote)
+            ? parsed.items
+            : (localMode ? structuredClone(sampleInventory) : []),
           history: Array.isArray(parsed.history) ? parsed.history : [],
           categories: Array.isArray(parsed.categories) ? parsed.categories : [],
           forecasts: normalizeForecasts(parsed.forecasts),
@@ -1271,7 +1273,7 @@
       } catch {
         const localMode = localStorage.getItem(LOCAL_MODE_KEY) === "true";
         return {
-          items: structuredClone(sampleInventory),
+          items: localMode ? structuredClone(sampleInventory) : [],
           history: [],
           categories: [],
           forecasts: [],
@@ -1769,8 +1771,8 @@
       els.kpiLow.textContent = low;
       els.kpiZero.textContent = zero;
       els.kpiCategories.textContent = categories;
-      els.connectionPill.textContent = state.loadedFromRemote ? "GAS読込済み" : (state.apiUrl ? "API設定あり" : "ローカルモード");
-      els.syncState.textContent = isRemoteLoading ? "読み込み中..." : (state.apiUrl ? "同期準備OK" : "保存済み");
+      els.connectionPill.textContent = state.localMode ? "お試しモード" : (state.loadedFromRemote ? "在庫データを表示中" : "在庫データを確認中");
+      els.syncState.textContent = isRemoteLoading ? "読み込み中..." : (lastRemoteError ? "読み込み失敗" : (state.loadedFromRemote ? "同期済み" : (state.localMode ? "端末に保存済み" : "接続待ち")));
       els.lastUpdatedPill.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
       document.getElementById("btnModeRemote")?.classList.toggle("active", !state.localMode);
       document.getElementById("btnModeLocal")?.classList.toggle("active", Boolean(state.localMode));
@@ -1833,10 +1835,12 @@
     function renderInventory() {
       const visible = getVisibleItems();
       if (!visible.length) {
+        const emptyMessage = !state.localMode && !state.loadedFromRemote
+          ? "在庫データを読み込んでいます。読み込みが終わらない場合は、上の再読み込みをお試しください。"
+          : "条件に一致する品目はありません。<br>検索やカテゴリを変えるか、新しい品目を追加してください。";
         els.list.innerHTML = `
           <div class="empty">
-            条件に一致する品目はありません。<br>
-            検索やカテゴリを変えるか、新しい品目を追加してください。
+            ${emptyMessage}
           </div>
         `;
         return;
