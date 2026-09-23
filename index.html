@@ -1602,9 +1602,10 @@
       return `残り ${forecast.daysLeft}日`;
     }
 
-    function formatForecastDetail(forecast) {
+    function formatForecastDetail(forecast, item) {
       if (!forecast || forecast.basis === "insufficient") {
-        const count = forecast ? forecast.sampleCount : 0;
+        const count = forecast ? forecast.sampleCount
+          : (state.localMode && item ? getConsumptionHistoryRows().filter((row) => normalize(row.name) === normalize(item.name)).length : 0);
         return `利用記録${count}件・最低在庫で判定`;
       }
       const period = forecast.basis === "recent180" ? "直近180日"
@@ -1917,12 +1918,12 @@
             </div>
             <div class="item-forecast">
               <span class="forecast-badge ${forecastBadgeClass(forecast)}">${escapeHtml(formatForecastText(forecast))}</span>
-              <span class="forecast-badge muted">${escapeHtml(formatForecastDetail(forecast))}</span>
+              <span class="forecast-badge muted">${escapeHtml(formatForecastDetail(forecast, item))}</span>
             </div>
           </div>
           <div>${statusLabel(status)}</div>
           <div class="item-actions">
-            <button class="mini green" data-action="inc" data-name="${escapeHtml(item.name)}">+1</button>
+            <button class="mini green" data-action="inc" data-name="${escapeHtml(item.name)}" ${pendingAdjustNames.has(normalize(item.name)) ? "disabled" : ""}>+1</button>
             <button class="mini red" data-action="dec" data-name="${escapeHtml(item.name)}" ${Number(item.stock) <= 0 || pendingAdjustNames.has(normalize(item.name)) ? "disabled" : ""}>1つ使った</button>
             <button class="mini blue" data-action="edit" data-name="${escapeHtml(item.name)}">編集</button>
             <button class="mini gray" data-action="delete" data-name="${escapeHtml(item.name)}">削除</button>
