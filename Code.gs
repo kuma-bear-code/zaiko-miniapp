@@ -123,7 +123,7 @@ function doPost(e) {
     }
 
     if (action === 'adjustItem') {
-      adjustInventoryItem_(ss, body.name, Number(body.delta || 0), body.memo || '');
+      adjustInventoryItem_(ss, body.name, Number(body.delta || 0), body.memo || '', body.expectedStock);
       refreshForecastAnalysisForSpreadsheet_(ss);
       return respondJson_({ status: 'ok', message: 'item adjusted', summary: buildSummary_(ss) });
     }
@@ -184,7 +184,7 @@ function doGet(e) {
     if (action === 'adjustItem') {
       const adjustAuth = authorizeWebAppRequest_(params.idToken);
       if (!adjustAuth.ok) return jsonpOrJson_({ status: 'error', message: adjustAuth.message }, params.callback);
-      const updated = adjustInventoryItem_(ss, params.name, Number(params.delta || 0), params.memo || '');
+      const updated = adjustInventoryItem_(ss, params.name, Number(params.delta || 0), params.memo || '', params.expectedStock);
       refreshForecastAnalysisForSpreadsheet_(ss);
       return jsonpOrJson_({ status: 'ok', updated: updated, summary: buildSummary_(ss) }, params.callback);
     }
@@ -1379,7 +1379,7 @@ function renameItemSettings_(ss, oldName, newName) {
   }
 }
 
-function adjustInventoryItem_(ss, name, delta, memo) {
+function adjustInventoryItem_(ss, name, delta, memo, expectedStock) {
   if (!isFinite(delta) || !delta) throw new Error('Invalid inventory adjustment.');
   const lock = LockService.getScriptLock();
   if (!lock.tryLock(5000)) throw new Error('Could not lock inventory.');
@@ -1389,6 +1389,8 @@ function adjustInventoryItem_(ss, name, delta, memo) {
   for (let i = 1; i < v.length; i++) {
     if (String(v[i][1]) === String(name)) {
       const current = Number(v[i][2] || 0);
+      if (expectedStock !== undefined && expectedStock !== null && expectedStock !== '' &&
+          current !== Number(expectedStock)) throw new Error('Inventory changed; reload before adjusting.');
       const next = Math.max(0, current + Number(delta || 0));
       sh.getRange(i + 1, 3).setValue(next);
       if (delta < 0 && current > next) {

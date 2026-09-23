@@ -97,6 +97,18 @@ assert.equal(context.adjustInventoryItem_(ss, 'soap', 3, ''), true);
 assert.equal(context.readInventoryItems_(ss)[0].stock, 3);
 assert.equal(context.bulkRestockItems_(ss, [{ name: 'soap', quantity: 12 }]).updated, 1);
 assert.equal(context.readInventoryItems_(ss)[0].stock, 15);
+const guardedInventory = sheet([
+  ['分類', '品目', '在庫', '最低在庫', '単位'],
+  ['日用品', 'guarded soap', 3, 1, '個']
+]);
+const guardedLog = sheet([['品目', '日付', '数量']]);
+const guardedSs = { getSheetByName: (name) => ({ Inventory: guardedInventory, ConsumptionLog: guardedLog })[name] };
+assert.throws(() => context.adjustInventoryItem_(guardedSs, 'guarded soap', -1, '', 2), /Inventory changed/);
+assert.equal(guardedInventory.rows[1][2], 3);
+assert.equal(guardedLog.rows.length, 1);
+assert.equal(context.adjustInventoryItem_(guardedSs, 'guarded soap', -1, '', 3), true);
+assert.equal(guardedInventory.rows[1][2], 2);
+assert.equal(guardedLog.rows[1][2], 1);
 assert.throws(() => context.updateInventoryItemFromParams_(ss, {
   name: 'soap', stock: 10, expectedStock: 14, minStock: 1
 }), /Inventory changed/);
@@ -140,6 +152,36 @@ const purchaseSs = {
 const shortageMessage = context.getShortageListByCategory(purchaseSs);
 assert.match(shortageMessage, /次回購入/);
 assert.match(shortageMessage, /購入目安 12 個/);
+
+const shoppingHtml = fs.readFileSync('shopping.html', 'utf8');
+const shoppingLogic = shoppingHtml.slice(
+  shoppingHtml.indexOf('    function normalize(value) {'),
+  shoppingHtml.indexOf('    function render() {')
+);
+const shoppingContext = vm.createContext({
+  state: {
+    items: [
+      { name: 'upcoming', stock: 3, minStock: 1, unit: '個' },
+      { name: 'enough', stock: 5, minStock: 1, unit: '個' },
+      { name: 'empty', stock: 0, minStock: 1, unit: '個' }
+    ],
+    forecasts: [
+      { name: 'upcoming', daysLeft: 20, suggestedPurchase: 4 },
+      { name: 'enough', daysLeft: 40, suggestedPurchase: 0 }
+    ]
+  },
+  filter: 'all',
+  DONE_KEY: 'done',
+  localStorage: { getItem: () => '{}' }
+});
+vm.runInContext(shoppingLogic, shoppingContext);
+const shoppingRows = shoppingContext.getShoppingItems();
+assert.equal(shoppingRows.length, 2);
+assert.equal(shoppingRows.find((row) => row.name === 'upcoming').suggested, 4);
+assert.equal(shoppingRows.find((row) => row.name === 'upcoming').purchaseStatus, '次回購入');
+assert.equal(shoppingRows.find((row) => row.name === 'empty').purchaseStatus, '今すぐ購入');
+shoppingContext.filter = 'next';
+assert.equal(shoppingContext.getShoppingItems().length, 1);
 
 for (const file of ['index.html', 'shopping.html']) {
   const html = fs.readFileSync(file, 'utf8');

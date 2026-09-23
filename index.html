@@ -1119,6 +1119,7 @@
     let syncPending = false;
     let remoteSnapshot = null;
     let pendingRemoteWrites = 0;
+    const pendingAdjustNames = new Set();
     let lineIdToken = "";
     let editingOriginalName = "";
     let lastRemoteError = "";
@@ -1564,6 +1565,11 @@
         return;
       }
       const localForecasts = buildForecastsFromHistory();
+      if (state.localMode) {
+        state.forecasts = localForecasts;
+        refreshForecastsFromItems();
+        return;
+      }
       const hasRemoteForecasts = Array.isArray(state.forecasts) && state.forecasts.length > 0;
       if (hasRemoteForecasts) {
         state.forecasts = normalizeForecasts(state.forecasts);
@@ -1597,10 +1603,14 @@
     }
 
     function formatForecastDetail(forecast) {
-      if (!forecast) return "消費ログが2件以上たまると予測します";
-      const pace = Number.isFinite(forecast.daysPerUnit) ? `1${forecast.unit}あたり約${forecast.daysPerUnit}日` : "消費ログを集計中";
-      const dateText = forecast.targetDate ? `${forecast.targetDate}ごろ` : "時期を推定中";
-      return `${dateText} / ${pace}`;
+      if (!forecast || forecast.basis === "insufficient") {
+        const count = forecast ? forecast.sampleCount : 0;
+        return `利用記録${count}件・最低在庫で判定`;
+      }
+      const period = forecast.basis === "recent180" ? "直近180日"
+        : forecast.basis === "recent365" ? "直近365日"
+        : forecast.basis === "all" ? "全期間" : "消費履歴";
+      return `${period}・利用記録${forecast.sampleCount}件から予測`;
     }
 
     function refreshForecastsFromItems() {
@@ -1881,7 +1891,7 @@
           const name = button.dataset.name;
           const category = button.dataset.category;
           if (action === "inc") adjustStock(name, 1, "在庫を1増やしました");
-          if (action === "dec") adjustStock(name, -1, "在庫を1減らしました");
+          if (action === "dec") adjustStock(name, -1, "1つ使いました");
           if (action === "edit") editItem(name);
           if (action === "delete") deleteItem(name);
           if (action === "focus-category") setSelectedCategory(category);
@@ -1913,7 +1923,7 @@
           <div>${statusLabel(status)}</div>
           <div class="item-actions">
             <button class="mini green" data-action="inc" data-name="${escapeHtml(item.name)}">+1</button>
-            <button class="mini red" data-action="dec" data-name="${escapeHtml(item.name)}">-1</button>
+            <button class="mini red" data-action="dec" data-name="${escapeHtml(item.name)}" ${Number(item.stock) <= 0 || pendingAdjustNames.has(normalize(item.name)) ? "disabled" : ""}>1つ使った</button>
             <button class="mini blue" data-action="edit" data-name="${escapeHtml(item.name)}">編集</button>
             <button class="mini gray" data-action="delete" data-name="${escapeHtml(item.name)}">削除</button>
           </div>
@@ -2003,13 +2013,28 @@
         alert("対象品目が見つかりませんでした。");
         return;
       }
+      const key = normalize(item.name);
+      if (pendingAdjustNames.has(key)) return;
+      const previousStock = Number(item.stock) || 0;
+      const nextStock = Math.max(0, previousStock + Number(delta));
+      const appliedDelta = nextStock - previousStock;
+      if (!Number.isFinite(appliedDelta) || !appliedDelta) return;
+      if (state.apiUrl && state.loadedFromRemote) pendingAdjustNames.add(key);
       pushUndo(`在庫調整: ${item.name}`);
-      item.stock = Math.max(0, Number(item.stock) + Number(delta));
-      log("在庫調整", `${item.name}: ${label} (${delta > 0 ? "+" : ""}${delta})`);
+      item.stock = nextStock;
+      log("在庫調整", `${item.name}: ${label} (${appliedDelta > 0 ? "+" : ""}${appliedDelta})`);
+      if (appliedDelta < 0 && state.localMode && state.history[0]) {
+        state.history[0].item = item.name;
+        state.history[0].date = new Date().toISOString();
+        state.history[0].quantity = -appliedDelta;
+        refreshForecastsFromHistory();
+      }
       refreshForecastsFromItems();
       saveState();
       render();
-      submitAdjustItem(item.name, delta, label);
+      if (state.apiUrl && state.loadedFromRemote) {
+        submitAdjustItem(item.name, appliedDelta, label, previousStock, nextStock);
+      }
     }
 
     function editItem(name) {
@@ -2027,26 +2052,27 @@
       submitDeleteItem(name);
     }
 
-    async function submitAdjustItem(name, delta, memo) {
-      if (!state.apiUrl) {
-        els.syncState.textContent = "API URL が未設定です";
-        return;
-      }
+    async function submitAdjustItem(name, delta, memo, previousStock, expectedStock) {
       pendingRemoteWrites++;
       updateUndoButton();
       try {
         els.syncState.textContent = "在庫調整を送信中...";
-        const data = await loadRemoteJsonp("adjustItem", { name, delta, memo });
-        if (data && data.status === "error") throw new Error(data.message || "adjustItem failed");
-        await loadRemote({ silent: true, auto: true });
-        els.syncState.textContent = "在庫調整を反映しました";
+        const data = await loadRemoteJsonp("adjustItem", { name, delta, memo, expectedStock: previousStock });
+        if (!data || data.status !== "ok" || !data.updated) throw new Error(data && data.message || "在庫更新の結果を確認できませんでした");
+        if (!await loadRemote({ silent: true, auto: true })) throw new Error("更新後の在庫を読み込めませんでした");
+        const confirmed = state.items.find((item) => normalize(item.name) === normalize(name));
+        if (!confirmed || Number(confirmed.stock) !== expectedStock) throw new Error("更新後の在庫が一致しません");
+        els.syncState.textContent = "在庫と消費履歴を確認しました";
       } catch (err) {
         console.error("adjustItem failed", err);
-        lastRemoteError = err && err.message ? err.message : "在庫調整エラー";
-        els.syncState.textContent = `在庫調整に失敗しました: ${lastRemoteError}`;
+        const problem = err && err.message ? err.message : "在庫調整エラー";
+        await loadRemote({ silent: true, auto: true });
+        lastRemoteError = problem;
       } finally {
+        pendingAdjustNames.delete(normalize(name));
         pendingRemoteWrites--;
         updateUndoButton();
+        render();
       }
     }
 

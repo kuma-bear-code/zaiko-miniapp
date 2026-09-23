@@ -369,6 +369,8 @@
 
       <div class="toolbar">
         <button class="chip active" data-filter="all" type="button">すべて</button>
+        <button class="chip" data-filter="immediate" type="button">今すぐ購入</button>
+        <button class="chip" data-filter="next" type="button">次回購入</button>
         <button class="chip" data-filter="urgent" type="button">1週間以内</button>
         <button class="chip" data-filter="low" type="button">低在庫</button>
         <button class="chip" data-filter="zero" type="button">在庫切れ</button>
@@ -398,6 +400,7 @@
 
     let lineIdToken = "";
     let filter = "all";
+    let restockInFlight = false;
     let state = {
       items: [],
       forecasts: [],
@@ -540,6 +543,7 @@
     }
 
     async function restockDoneItems(mode) {
+      if (restockInFlight) return;
       const checkedRows = getAllShoppingItems().filter((row) => row.done);
       if (!checkedRows.length) {
         els.syncState.textContent = "チェック済みの品目がありません";
@@ -558,28 +562,39 @@
 
       const label = mode === "one" ? "+1入庫" : "目安数で入庫";
       if (!confirm(`${restocks.length}件を${label}します。よろしいですか？`)) return;
-
-      const expected = new Map(restocks.map((row) => {
-        const item = state.items.find((candidate) => normalize(candidate.name) === normalize(row.name));
-        return [normalize(row.name), Number(item && item.stock || 0) + row.quantity];
-      }));
-      submitBulkRestock(restocks, label);
-      els.syncState.textContent = `${label}を確認中...`;
-      for (let attempt = 0; attempt < 4; attempt++) {
-        await new Promise((resolve) => setTimeout(resolve, 1500));
-        if (!await loadRemote()) continue;
-        const verified = [...expected].every(([key, quantity]) => {
-          const item = state.items.find((candidate) => normalize(candidate.name) === key);
-          return item && Number(item.stock) === quantity;
-        });
-        if (verified) {
-          clearDoneFor(restocks.map((row) => row.name));
-          els.syncState.textContent = `${label}をSheetsで確認しました`;
-          render();
-          return;
+      restockInFlight = true;
+      document.getElementById("btnRestockSuggested").disabled = true;
+      document.getElementById("btnRestockOne").disabled = true;
+      try {
+        const expected = new Map(restocks.map((row) => {
+          const item = state.items.find((candidate) => normalize(candidate.name) === normalize(row.name));
+          return [normalize(row.name), Number(item && item.stock || 0) + row.quantity];
+        }));
+        submitBulkRestock(restocks, label);
+        els.syncState.textContent = `${label}を確認中...`;
+        for (let attempt = 0; attempt < 4; attempt++) {
+          await new Promise((resolve) => setTimeout(resolve, 1500));
+          if (!await loadRemote()) continue;
+          const verified = [...expected].every(([key, quantity]) => {
+            const item = state.items.find((candidate) => normalize(candidate.name) === key);
+            return item && Number(item.stock) === quantity;
+          });
+          if (verified) {
+            clearDoneFor(restocks.map((row) => row.name));
+            els.syncState.textContent = `${label}をSheetsで確認しました`;
+            render();
+            return;
+          }
         }
+        els.syncState.textContent = "入庫を確認できませんでした。Sheetsの値を確認してください";
+      } catch (err) {
+        console.error("bulk restock failed", err);
+        els.syncState.textContent = "入庫処理を確認できませんでした。Sheetsの値を確認してください";
+      } finally {
+        restockInFlight = false;
+        document.getElementById("btnRestockSuggested").disabled = false;
+        document.getElementById("btnRestockOne").disabled = false;
       }
-      els.syncState.textContent = "入庫を確認できませんでした。Sheetsの値を確認してください";
     }
 
     function submitBulkRestock(restocks, label) {
@@ -737,14 +752,13 @@
         const daysLeft = forecast && Number.isFinite(forecast.daysLeft) ? forecast.daysLeft : null;
         const zero = stock <= 0;
         const low = stock < minStock;
-        const horizonDays = Math.max(1, Number(state.settings && state.settings.purchaseHorizonDays || 30));
         const urgent = daysLeft !== null && daysLeft <= 7;
-        const soon = daysLeft !== null && daysLeft <= horizonDays;
-        if (!zero && !low && !soon) return null;
         const forecastSuggested = forecast ? Number(forecast.suggestedPurchase || 0) : 0;
+        const soon = forecastSuggested > 0;
+        if (!zero && !low && !soon) return null;
         const suggested = forecastSuggested > 0
           ? forecastSuggested
-          : Math.max(shortage, minStock || 1, 1);
+          : Math.max(shortage, 1);
         return {
           id: normalize(item.name),
           name: item.name,
@@ -757,6 +771,7 @@
           suggested,
           zero,
           low,
+          purchaseStatus: zero || low ? "今すぐ購入" : "次回購入",
           urgent,
           soon,
           forecast,
@@ -766,6 +781,8 @@
 
       return rows
         .filter((row) => {
+          if (filter === "immediate") return row.purchaseStatus === "今すぐ購入";
+          if (filter === "next") return row.purchaseStatus === "次回購入";
           if (filter === "urgent") return row.urgent;
           if (filter === "low") return row.low;
           if (filter === "zero") return row.zero;
@@ -798,6 +815,7 @@
       els.metricTotal.textContent = allRows.length;
       els.metricWeek.textContent = allRows.filter((row) => row.urgent).length;
       els.metricZero.textContent = allRows.filter((row) => row.zero).length;
+      document.getElementById("btnRestockSuggested").textContent = `購入済み${allRows.filter((row) => row.done).length}件をまとめて入庫`;
       els.lastUpdated.textContent = new Date(state.lastUpdated).toLocaleString("ja-JP");
 
       if (!rows.length) {
@@ -814,22 +832,23 @@
           : "予測なし";
         const forecastTone = row.urgent ? "danger" : (row.soon ? "warn" : "blue");
         const basis = row.forecast
-          ? (row.forecast.basis === "all"
-              ? "全期間"
-              : (row.forecast.analysisDays > 0 ? `直近${row.forecast.analysisDays}日` : row.forecast.basis))
-          : "";
+          ? (row.forecast.basis === "recent180" ? "直近180日"
+              : row.forecast.basis === "recent365" ? "直近365日"
+              : row.forecast.basis === "all" ? "全期間" : "履歴不足")
+          : "履歴不足";
         const reason = row.zero ? "在庫切れ" : (row.low ? "低在庫" : "次回買い物候補");
         return `
           <article class="item ${row.done ? "done" : ""}">
-            <input class="check" type="checkbox" data-done="${escapeHtml(row.id)}" ${row.done ? "checked" : ""} />
+            <input class="check" type="checkbox" aria-label="${escapeHtml(row.name)}を購入済みにする" data-done="${escapeHtml(row.id)}" ${row.done ? "checked" : ""} />
             <div>
               <div class="name">${escapeHtml(row.name)}</div>
               <div class="meta">
                 <span class="badge green">${escapeHtml(row.category)}</span>
                 <span class="badge ${row.zero ? "danger" : (row.low ? "warn" : "blue")}">${escapeHtml(reason)}</span>
+                <span class="badge ${row.purchaseStatus === "今すぐ購入" ? "danger" : "blue"}">${row.purchaseStatus}</span>
                 <span class="badge ${forecastTone}">${escapeHtml(forecastText)}</span>
                 ${row.location ? `<span class="badge">${escapeHtml(row.location)}</span>` : ""}
-                ${basis ? `<span class="badge">${escapeHtml(basis)}</span>` : ""}
+                <span class="badge">${escapeHtml(basis)}・${row.forecast ? row.forecast.sampleCount : 0}件で判定</span>
                 <span class="badge">在庫 ${row.stock}${escapeHtml(row.unit)} / 最低 ${row.minStock}${escapeHtml(row.unit)}</span>
               </div>
             </div>
