@@ -1747,7 +1747,7 @@
 
     function renderAnomalies() {
       const anomalies = Array.isArray(state.anomalies) ? state.anomalies : [];
-      els.anomalySummary.textContent = `消費履歴の確認メモ (${anomalies.length}件・在庫調整を含む)`;
+      els.anomalySummary.textContent = `消費履歴の確認メモ (${anomalies.length}件・利用記録は予測に含む)`;
       els.anomalyList.innerHTML = anomalies.length
         ? anomalies.map((row) => {
             const link = /^https:\/\/docs\.google\.com\/spreadsheets\//.test(state.spreadsheetUrl) && state.consumptionLogSheetId

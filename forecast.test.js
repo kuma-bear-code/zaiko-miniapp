@@ -45,8 +45,17 @@ const logSheet = {
 };
 const anomalies = context.buildConsumptionAnomalies_({ getSheetByName: () => logSheet }, { ...settings, anomalyMultiplier: 4 });
 assert.equal(anomalies.length, 3);
-assert.equal(anomalies.filter((row) => row.reasons.includes('同日同量の記録（在庫調整を含む）')).length, 2);
+assert.equal(anomalies.filter((row) => row.reasons.includes('同日同量の利用記録（予測に含む）')).length, 2);
 assert.equal(anomalies.find((row) => row.quantity === 8).row, 5);
+const recentDate = new Date(Date.now() - 86400000).toISOString().slice(0, 10);
+const usageRows = [['soap', recentDate, 1], ['soap', recentDate, 1]];
+const usageSheet = {
+  getLastRow: () => usageRows.length + 1,
+  getRange: () => ({ getValues: () => usageRows })
+};
+const usageStats = context.readConsumptionStats_({ getSheetByName: () => usageSheet }, settings);
+assert.equal(usageStats.soap.primary.count, 2);
+assert.equal(usageStats.soap.primary.quantity, 2);
 
 function sheet(initialRows) {
   const rows = initialRows.map((row) => [...row]);
