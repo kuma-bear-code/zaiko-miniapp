@@ -532,7 +532,7 @@ function buildConsumptionAnomalies_(ss, settings) {
     const middle = Math.floor(peers.length / 2);
     const median = peers.length % 2 ? peers[middle] : (peers[middle - 1] + peers[middle]) / 2;
     const reasons = [];
-    if (counts[record.signature] > 1) reasons.push('完全一致の重複記録');
+    if (counts[record.signature] > 1) reasons.push('同日同量の記録（在庫調整を含む）');
     if (peers.length && record.quantity >= Math.max(5, median * multiplier)) {
       reasons.push('数量が通常より大きい');
     }

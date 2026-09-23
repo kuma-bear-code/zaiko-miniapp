@@ -45,7 +45,7 @@ const logSheet = {
 };
 const anomalies = context.buildConsumptionAnomalies_({ getSheetByName: () => logSheet }, { ...settings, anomalyMultiplier: 4 });
 assert.equal(anomalies.length, 3);
-assert.equal(anomalies.filter((row) => row.reasons.includes('完全一致の重複記録')).length, 2);
+assert.equal(anomalies.filter((row) => row.reasons.includes('同日同量の記録（在庫調整を含む）')).length, 2);
 assert.equal(anomalies.find((row) => row.quantity === 8).row, 5);
 
 function sheet(initialRows) {
