@@ -143,7 +143,7 @@
 
     .metric {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 16px;
       background: #fff;
       padding: 13px;
       box-shadow: var(--shadow);
@@ -191,6 +191,14 @@
       flex-wrap: wrap;
       gap: 8px;
       margin: 0 0 14px;
+      position: sticky;
+      top: 100px;
+      z-index: 10;
+      padding: 10px;
+      border: 1px solid var(--line);
+      border-radius: 16px;
+      background: rgba(245, 251, 247, 0.94);
+      backdrop-filter: blur(10px);
     }
 
     .action-row .btn {
@@ -204,7 +212,7 @@
 
     .item {
       border: 1px solid var(--line);
-      border-radius: 8px;
+      border-radius: 16px;
       background: #fff;
       padding: 14px;
       display: grid;
@@ -316,7 +324,11 @@
       .app { padding: 12px; }
       .topbar { margin: -12px -12px 14px; padding: 14px 12px; }
       .topbar-inner { align-items: flex-start; flex-direction: column; }
-      .summary-grid { grid-template-columns: 1fr; }
+      .summary-grid { grid-template-columns: repeat(3, minmax(0, 1fr)); }
+      .metric { padding: 11px 8px; text-align: center; }
+      .metric strong { font-size: 24px; }
+      .action-row { top: 128px; display: grid; grid-template-columns: 1fr 1fr; }
+      .action-row .btn:first-child { grid-column: 1 / -1; }
       .item { grid-template-columns: auto 1fr; }
       .qty { grid-column: 2; text-align: left; }
     }
@@ -338,7 +350,7 @@
           <div class="brand-badge">買</div>
           <div>
             <h1>買い物リスト</h1>
-            <p>低在庫と消費予測から、今日買うものだけに絞るページ</p>
+            <p>必要なものと購入数をまとめて確認</p>
           </div>
         </div>
         <div class="top-actions">
@@ -364,9 +376,9 @@
       </div>
 
       <div class="action-row">
-        <button class="btn primary" id="btnRestockSuggested" type="button">チェック済みを目安数で入庫</button>
-        <button class="btn" id="btnRestockOne" type="button">チェック済みを+1入庫</button>
-        <button class="btn" id="btnClearDone" type="button">チェックをクリア</button>
+        <button class="btn primary" id="btnRestockSuggested" type="button">購入済みをまとめて入庫</button>
+        <button class="btn" id="btnRestockOne" type="button">各商品を1個入庫</button>
+        <button class="btn" id="btnClearDone" type="button">選択を解除</button>
       </div>
 
       <div class="list" id="shoppingList"></div>

@@ -3,7 +3,7 @@
 <head>
   <meta charset="utf-8" />
   <meta name="viewport" content="width=device-width, initial-scale=1" />
-  <title>在庫管理コンソール</title>
+  <title>おうち在庫</title>
   <script src="https://static.line-scdn.net/liff/edge/2/sdk.js"></script>
   <style>
     :root {
@@ -140,6 +140,23 @@
     .btn.success { background: var(--green); color: #fff; }
     .btn.ghost { background: rgba(255, 255, 255, 0.14); color: #fff; border-color: rgba(255, 255, 255, 0.22); box-shadow: none; }
     .btn.danger { background: #fff1f1; color: #b91c1c; }
+
+    .advanced-panel > summary {
+      cursor: pointer;
+      list-style: none;
+      font-size: 15px;
+      font-weight: 900;
+      padding: 2px 0;
+    }
+
+    .advanced-panel > summary::-webkit-details-marker { display: none; }
+    .advanced-panel > summary::after {
+      content: "＋";
+      float: right;
+      color: var(--green-dark);
+    }
+    .advanced-panel[open] > summary::after { content: "－"; }
+    .advanced-panel[open] > summary { margin-bottom: 16px; }
 
     .shell {
       display: grid;
@@ -801,6 +818,15 @@
       .hero-head, .section-head { flex-direction: column; align-items: flex-start; }
       .status-row { justify-content: flex-start; }
       .sticky-right { position: static; }
+      .brand p { display: none; }
+      .brand-badge { width: 44px; height: 44px; border-radius: 14px; }
+      .top-actions { width: 100%; display: grid; grid-template-columns: 1.2fr 1fr 1fr; }
+      .top-actions .btn { min-width: 0; padding: 10px 8px; }
+      .top-actions .desktop-action { display: none; }
+      .kpi { padding: 13px; }
+      .kpi .sub { display: none; }
+      .forecast-summary { grid-template-columns: 1fr; }
+      .section-subtitle { line-height: 1.5; }
     }
   </style>
 </head>
@@ -818,8 +844,8 @@
         <div class="brand">
           <div class="brand-badge">L</div>
           <div>
-            <h1>在庫管理コンソール</h1>
-            <p>LINE風の見た目で、カテゴリごとの在庫をすぐ把握できる画面</p>
+            <h1>おうち在庫</h1>
+            <p>在庫・消費・次の買い物をひとつの画面で管理</p>
           </div>
         </div>
         <div class="top-actions">
@@ -827,8 +853,8 @@
           <button class="btn add" id="btnOpenQuickAdd">＋追加</button>
           <button class="btn ghost" id="btnUndo" type="button" disabled>取り消し</button>
           <button class="btn ghost" id="btnReload">再読み込み</button>
-          <button class="btn ghost" id="btnExport">JSON出力</button>
-          <button class="btn primary" id="btnSync">GASへ同期</button>
+          <button class="btn ghost desktop-action" id="btnExport">データ出力</button>
+          <button class="btn primary desktop-action" id="btnSync">今すぐ同期</button>
         </div>
       </div>
     </header>
@@ -837,10 +863,9 @@
       <section class="panel hero">
         <div class="hero-head">
           <div>
-            <h2 class="section-title">全体サマリー</h2>
+            <h2 class="section-title">今日の在庫状況</h2>
             <p class="section-subtitle">
-              カテゴリごとの在庫状況を、ボタンひとつで切り替えて見られます。<br>
-              低在庫と在庫切れは強く見えるようにしています。
+              足りないものと、次の買い物までに必要なものを確認できます。
             </p>
           </div>
           <div class="status-row">
@@ -875,7 +900,7 @@
 
         <div class="forecast-summary" id="forecastSummary">
           <button class="forecast-card warn" id="forecast14Card" type="button" data-forecast-filter="forecast14">
-            <strong>次回買い物までに不足しそう</strong>
+            <strong>次の買い物で購入</strong>
             <span id="forecast14Text">消費ログを集計すると表示されます。</span>
           </button>
           <button class="forecast-card danger" id="forecast7Card" type="button" data-forecast-filter="forecast7">
@@ -892,8 +917,8 @@
 
         <div class="section-head">
           <div>
-            <h2>カテゴリボタン</h2>
-            <p>押すとそのカテゴリだけに絞り込めます。全体・低在庫・在庫切れもワンタップです。</p>
+            <h2>カテゴリ</h2>
+            <p>見たい分類や在庫状態を選べます。</p>
           </div>
         </div>
         <div class="category-bar" id="categoryBar"></div>
@@ -929,8 +954,8 @@
         <section class="panel section">
           <div class="section-head">
             <div>
-              <h2>登録・調整</h2>
-              <p>よく使う入力だけを残して、すぐ更新できるようにしています。</p>
+              <h2>品目の登録と調整</h2>
+              <p>新しい品目の登録や、数量をまとめて調整できます。</p>
             </div>
           </div>
 
@@ -983,13 +1008,9 @@
           </div>
         </section>
 
-        <section class="panel section">
-          <div class="section-head">
-            <div>
-              <h2>同期設定</h2>
-              <p>標準は GAS 同期です。ローカルモードは必要なときだけ切り替えます。</p>
-            </div>
-          </div>
+        <details class="panel section advanced-panel">
+          <summary>接続と同期</summary>
+          <p class="section-subtitle">通常は自動同期されるため、設定変更は必要ありません。</p>
           <div class="mini-chip-row" style="margin-bottom: 12px;">
             <button class="mini-chip active" type="button" id="btnModeRemote">標準同期</button>
             <button class="mini-chip" type="button" id="btnModeLocal">ローカルモード</button>
@@ -1006,36 +1027,13 @@
           <p class="note">
             標準同期では、他の端末でもURL入力なしでそのまま使えます。ローカルモードは端末ごとの下書き用です。
           </p>
-        </section>
+        </details>
 
-        <section class="panel section">
-          <div class="section-head">
-            <div>
-              <h2>公開手順</h2>
-              <p>GitHub Pages と GAS をつなぐ最短ルートです。</p>
-            </div>
-          </div>
-          <div class="guide">
-            <div class="guide-step">`index.html` を GitHub リポジトリのルートに置く。</div>
-            <div class="guide-step">GitHub に push して、Repository Settings の Pages を有効化する。</div>
-            <div class="guide-step">Build and deployment は `Deploy from a branch`、Branch は `main`、Folder は `/ (root)` にする。</div>
-            <div class="guide-step">GAS を Web App として公開する。標準同期URLは画面に組み込み済みです。</div>
-            <div class="guide-step">LINE Bot 側は GAS の Webhook を維持しつつ、必要ならこの画面の保存ロジックを同じシートに寄せる。</div>
-          </div>
-        </section>
-
-        <section class="panel section">
-          <div class="section-head">
-            <div>
-              <h2>操作履歴</h2>
-              <p>最近の更新や同期を残します。</p>
-            </div>
-          </div>
+        <details class="panel section advanced-panel">
+          <summary>最近の操作</summary>
+          <p class="section-subtitle">在庫変更と同期の履歴を確認できます。</p>
           <div class="history" id="historyList"></div>
-          <p class="note">
-            もし次に進めるなら、GAS 側に `GET` と `POST` の受け口を追加して、この画面から直接在庫を更新できる形まで整えられます。
-          </p>
-        </section>
+        </details>
       </aside>
     </div>
   </div>
